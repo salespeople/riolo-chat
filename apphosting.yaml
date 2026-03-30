@@ -10,3 +10,6 @@ env:
     secret: SENDPULSE_CLIENT_ID
   - variable: SENDPULSE_CLIENT_SECRET
     secret: SENDPULSE_CLIENT_SECRET
+  - variable: FIREBASE_PRIVATE_KEY
+    secret: FIREBASE_PRIVATE_KEY
+    

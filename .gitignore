@@ -41,3 +41,4 @@ next-env.d.ts
 .idx
 .web
 firebase-service-account.json
+node_modules

@@ -15,12 +15,11 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 import { useTheme, DEFAULT_THEME } from '@/components/layout/theme-provider';
-import { useAuth, useFirebaseApp } from '@/firebase';
+import { useAuth, useFirebaseApp, useFirestore } from '@/firebase';
 import { uploadFile } from '@/lib/storage';
 import { Loader2 } from 'lucide-react';
-import { setThemeSettings } from '@/lib/theme';
-import { useFirestore } from '@/firebase';
 import { useBotStore } from '@/stores/bot-store';
+import { doc, setDoc } from 'firebase/firestore';
 
 // Funzione per convertire HEX in HSL
 function hexToHsl(hex: string): string {
@@ -66,7 +65,7 @@ export default function StyleSettingsDialog({
   onClose,
 }: StyleSettingsDialogProps) {
   
-  const { theme, updateTheme, isThemeLoading } = useTheme();
+  const { theme, isThemeLoading } = useTheme();
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_THEME.primaryColor);
   const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor);
   const [headerName, setHeaderName] = useState(DEFAULT_THEME.headerName);
@@ -80,7 +79,7 @@ export default function StyleSettingsDialog({
   const firebaseApp = useFirebaseApp();
   const firestore = useFirestore();
   const auth = useAuth();
-  const { activeBotId } = useBotStore();
+  const { activeBotId, bots } = useBotStore();
   
   useEffect(() => {
     if (isOpen && !isThemeLoading) {
@@ -124,7 +123,6 @@ export default function StyleSettingsDialog({
         return;
       }
       setStagedLogoFile(file);
-      // Create a temporary URL for preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setLogoUrl(reader.result as string);
@@ -134,6 +132,17 @@ export default function StyleSettingsDialog({
   };
 
   const handleSave = async () => {
+    if (!firestore || !activeBotId) {
+      toast({ variant: 'destructive', title: 'Errore', description: 'Nessun bot selezionato.' });
+      return;
+    }
+
+    const activeBot = bots.find(b => b.botId === activeBotId);
+    if (!activeBot) {
+      toast({ variant: 'destructive', title: 'Errore', description: 'Bot non trovato.' });
+      return;
+    }
+
     setIsSaving(true);
     let finalLogoUrl = logoUrl;
 
@@ -142,15 +151,13 @@ export default function StyleSettingsDialog({
             finalLogoUrl = await uploadFile(firebaseApp, auth, stagedLogoFile, 'uploads');
         }
 
-        const settingsToUpdate: Partial<ThemeSettings> = {
-            primaryColor,
-            accentColor,
-            headerName,
+        // Salva direttamente nel documento del bot
+        const botDocRef = doc(firestore, 'bots', activeBot.id);
+        await setDoc(botDocRef, {
+            headerColor: primaryColor,
+            headerTitle: headerName,
             logoUrl: finalLogoUrl,
-        };
-
-        // Usa l'hook updateTheme che ora gestisce l'ID istanza
-        await updateTheme(settingsToUpdate);
+        }, { merge: true });
 
         toast({ title: 'Impostazioni salvate', description: 'Lo stile è stato aggiornato con successo.' });
         onClose();
@@ -163,25 +170,30 @@ export default function StyleSettingsDialog({
   };
   
   const handleReset = async () => {
-      setIsSaving(true);
-      try {
-        // Salva le impostazioni predefinite nel documento dell'istanza corrente
-        if (firestore && activeBotId) {
-            await setThemeSettings(firestore, DEFAULT_THEME, activeBotId);
-            // Aggiorna anche lo stato locale
-            await updateTheme(DEFAULT_THEME);
-            toast({ title: 'Impostazioni ripristinate', description: 'Lo stile per questa istanza è tornato ai valori predefiniti.' });
-        }
+    if (!firestore || !activeBotId) return;
+
+    const activeBot = bots.find(b => b.botId === activeBotId);
+    if (!activeBot) return;
+
+    setIsSaving(true);
+    try {
+        const botDocRef = doc(firestore, 'bots', activeBot.id);
+        await setDoc(botDocRef, {
+            headerColor: DEFAULT_THEME.primaryColor,
+            headerTitle: '',
+            logoUrl: '',
+        }, { merge: true });
+
+        toast({ title: 'Impostazioni ripristinate', description: 'Lo stile per questo bot è tornato ai valori predefiniti.' });
         onClose();
-      } catch (error) {
-         toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile ripristinare le impostazioni.' });
-      } finally {
-          setIsSaving(false);
-      }
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile ripristinare le impostazioni.' });
+    } finally {
+        setIsSaving(false);
+    }
   };
   
   const handleClose = () => {
-    // Re-apply original theme colors on close without saving
     applyPreviewColors(theme.primaryColor, theme.accentColor);
     onClose();
   }
@@ -194,7 +206,7 @@ export default function StyleSettingsDialog({
         <DialogHeader>
           <DialogTitle>Personalizza Stile</DialogTitle>
           <DialogDescription>
-            Le modifiche verranno applicate solo a questa istanza dell'app.
+            Le modifiche verranno applicate al bot attivo.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
@@ -235,7 +247,7 @@ export default function StyleSettingsDialog({
                             width={64}
                             height={64}
                             className="object-cover h-full w-full"
-                            key={logoUrl} // Force re-render on change
+                            key={logoUrl}
                         />
                     </div>
                     <div className="flex flex-col gap-2">
@@ -254,7 +266,7 @@ export default function StyleSettingsDialog({
             <Button variant="outline" onClick={handleClose} disabled={isLoading}>
                 Annulla
             </Button>
-            <Button onClick={handleSave} disabled={isLoading}>
+            <Button onClick={handleSave} disabled={isLoading || !activeBotId}>
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salva e Chiudi'}
             </Button>
           </div>

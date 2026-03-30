@@ -1,11 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { produce } from 'immer';
-import { useFirestore, useUser } from '@/firebase';
-import { getSidebarDisplaySettings, setSidebarDisplaySettings } from '@/lib/sidebar';
-import { useToast } from '@/hooks/use-toast';
-import { useBotStore } from '@/stores/bot-store';
 
 // Definisce i campi specifici per la sezione Dettagli
 export interface ContactDetailsVisibility {
@@ -65,81 +61,34 @@ interface SidebarDisplayContextType {
 const SidebarDisplayContext = createContext<SidebarDisplayContextType | undefined>(undefined);
 
 export const SidebarDisplayProvider = ({ children }: { children: ReactNode }) => {
-  const firestore = useFirestore();
-  const { user, isUserLoading } = useUser();
-  const { toast } = useToast();
-  const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS);
-  const [isDisplaySettingsLoading, setIsDisplaySettingsLoading] = useState(true);
-  const { activeBotId } = useBotStore();
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-      if (firestore && user) {
-        setIsDisplaySettingsLoading(true);
-        try {
-          const storedSettings = await getSidebarDisplaySettings(firestore, activeBotId ?? undefined);
-          if (storedSettings) {
-             const mergedSettings = produce(DEFAULT_DISPLAY_SETTINGS, draft => {
-                draft.pauseAutomation = storedSettings.pauseAutomation ?? draft.pauseAutomation;
-                draft.tags = storedSettings.tags ?? draft.tags;
-                draft.operator = storedSettings.operator ?? draft.operator;
-                
-                if (storedSettings.contactDetails) {
-                    draft.contactDetails.showSection = storedSettings.contactDetails.showSection ?? draft.contactDetails.showSection;
-                    Object.assign(draft.contactDetails.fields, storedSettings.contactDetails.fields);
-                }
-                if (storedSettings.variables) {
-                    draft.variables.showSection = storedSettings.variables.showSection ?? draft.variables.showSection;
-                    Object.assign(draft.variables.fields, storedSettings.variables.fields);
-                }
-            });
-            setDisplaySettings(mergedSettings);
-          }
-        } catch (error) {
-          console.warn("Failed to fetch sidebar display settings from Firestore", error);
-        } finally {
-          setIsDisplaySettingsLoading(false);
-        }
-      } else if (!isUserLoading && !user) {
-        setIsDisplaySettingsLoading(false);
-      }
-    };
-    fetchSettings();
-  }, [firestore, activeBotId, user, isUserLoading]);
+  const [displaySettings, setDisplaySettingsState] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS);
 
   const handleSetDisplaySettings = useCallback((updater: Partial<DisplaySettings> | ((draft: DisplaySettings) => void)) => {
-    const newSettings = produce(displaySettings, typeof updater === 'function' ? updater : draft => {
-      Object.assign(draft, updater);
-    });
-
-    setDisplaySettings(newSettings); // Optimistic update
-
-    if (firestore && user?.role === 'admin' && activeBotId) {
-      setSidebarDisplaySettings(firestore, newSettings, activeBotId).catch(error => {
-        console.error("Failed to save sidebar display settings to Firestore", error);
-        // Optional: Revert optimistic update on failure
-        setDisplaySettings(displaySettings); 
-        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare le impostazioni di visualizzazione.' });
-      });
-    }
-  }, [displaySettings, firestore, toast, user, activeBotId]);
+    setDisplaySettingsState(current =>
+      produce(current, typeof updater === 'function' ? updater : draft => {
+        Object.assign(draft, updater);
+      })
+    );
+  }, []);
 
   const initializeVariableSettings = useCallback((variableNames: string[]) => {
-     handleSetDisplaySettings(draft => {
-        const currentVarKeys = Object.keys(draft.variables.fields);
-        let updated = false;
-        variableNames.forEach(name => {
-            if (!currentVarKeys.includes(name)) {
-                draft.variables.fields[name] = true; // Imposta su true per le nuove variabili
-                updated = true;
-            }
-        });
-     });
+    handleSetDisplaySettings(draft => {
+      const currentVarKeys = Object.keys(draft.variables.fields);
+      variableNames.forEach(name => {
+        if (!currentVarKeys.includes(name)) {
+          draft.variables.fields[name] = true;
+        }
+      });
+    });
   }, [handleSetDisplaySettings]);
 
-
   return (
-    <SidebarDisplayContext.Provider value={{ displaySettings, isDisplaySettingsLoading, setDisplaySettings: handleSetDisplaySettings, initializeVariableSettings }}>
+    <SidebarDisplayContext.Provider value={{
+      displaySettings,
+      isDisplaySettingsLoading: false,
+      setDisplaySettings: handleSetDisplaySettings,
+      initializeVariableSettings,
+    }}>
       {children}
     </SidebarDisplayContext.Provider>
   );

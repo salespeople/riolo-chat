@@ -19,10 +19,10 @@ service cloud.firestore {
       return isSignedIn() && getUserData().role in ['superadmin', 'admin'];
     }
 
-    // Bot: leggibili da tutti gli autenticati, scrivibili solo da superadmin
+    // Bot: leggibili da tutti gli autenticati, scrivibili da admin+
     match /bots/{botId} {
       allow read: if isSignedIn();
-      allow write: if isSuperadmin();
+      allow write: if isAdminOrAbove();
     }
 
     // Users: get dal proprietario o admin+, list da tutti gli autenticati
@@ -35,24 +35,6 @@ service cloud.firestore {
 
     match /quick_replies/{id} {
       allow read, write: if isSignedIn();
-    }
-
-    match /settings/theme {
-      allow read: if isSignedIn();
-      allow write: if isAdminOrAbove();
-      match /instances/{instanceId} {
-        allow read: if isSignedIn();
-        allow write: if isAdminOrAbove();
-      }
-    }
-
-    match /settings/sidebarDisplay {
-      allow read: if isSignedIn();
-      allow write: if isAdminOrAbove();
-      match /instances/{instanceId} {
-        allow read: if isSignedIn();
-        allow write: if isAdminOrAbove();
-      }
     }
 
     match /privacy_consents/{id} {
