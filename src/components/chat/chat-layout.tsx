@@ -10,7 +10,7 @@ import ChatInfo from "@/components/chat/chat-info";
 import { agent } from "@/lib/data";
 import { produce } from "immer";
 import { uploadFile } from "@/lib/storage";
-import { getChats, sendMessage, sendTemplateMessage, closeChat, openChat, getWhatsappBotVariables, getWhatsappTags, assignContactToOperator, fetchNextChatPage, getMessagesForChat, loadOlderMessages, markChatAsRead, addContactNote, deleteContactNote, updateContactNote } from "@/lib/sendpulse";
+import { getChatsForBot, sendMessage, sendTemplateMessage, closeChat, openChat, getWhatsappBotVariables, getWhatsappTags, assignContactToOperator, fetchNextChatPage, getMessagesForChat, loadOlderMessages, markChatAsRead, addContactNote, deleteContactNote, updateContactNote } from "@/lib/sendpulse";
 import { useFirebaseApp, useAuth, useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import type { UserProfile } from "@/firebase/auth/use-user";
@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Info, ArrowLeft, Loader2, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTheme } from "@/components/layout/theme-provider";
+import { useBotStore } from "@/stores/bot-store";
+import { useUserBots } from "@/hooks/use-user-bots";
 
 const MobileHeader = ({
     selectedChatId,
@@ -237,7 +239,9 @@ export default function ChatLayout() {
 
     const [nextLinks, setNextLinks] = useState<Record<string, string | null>>({});
 
-    const [bots, setBots] = useState<Bot[]>([]);
+    const { bots, activeBotId, setActiveBotId, setBots } = useBotStore();
+    const userBots = useUserBots(bots, currentUser);
+    const displayedBots = userBots;
     const [botVariables, setBotVariables] = useState<SendPulseBotVariable[]>([]);
     const [allTags, setAllTags] = useState<SendPulseTag[]>([]);
 
@@ -278,8 +282,6 @@ export default function ChatLayout() {
         selectedChatIdRef.current = selectedChatId;
     }, [selectedChatId]);
 
-    const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID;
-
     const usersCollection = useMemoFirebase(() => {
         if (firestore) {
             return collection(firestore, 'users');
@@ -303,18 +305,18 @@ export default function ChatLayout() {
         if (botsData) {
             setBots(botsData);
         }
-    }, [botsData]);
+    }, [botsData, setBots]);
 
 
     const operators = useMemo(() => {
-        if (!allUsers || !appInstanceId) return [];
+        if (!allUsers || !activeBotId) return [];
         return allUsers.filter(user =>
             user.role === 'operator' &&
             user.operatorId &&
-            Array.isArray(user.instanceId) &&
-            user.instanceId.includes(appInstanceId)
+            Array.isArray(user.botIds) &&
+            (activeBotId ? user.botIds.includes(activeBotId) : true)
         );
-    }, [allUsers, appInstanceId]);
+    }, [allUsers, activeBotId]);
 
 
     useEffect(() => {
@@ -325,7 +327,7 @@ export default function ChatLayout() {
         }
     }, [selectedChatId, isMobile]);
 
-    const refreshChatList = useCallback(async (isManualRefresh = false) => {
+    const refreshChatList = useCallback(async (isManualRefresh = false, specificBotId?: string) => {
         if (isRefreshingRef.current) {
             if (!isManualRefresh) console.log("⏸️ Refresh già in corso, skip.");
             return;
@@ -335,14 +337,38 @@ export default function ChatLayout() {
 
         if (!isManualRefresh) console.log("🔄 Trigger ricevuto, aggiorno la lista chat...");
         try {
-            const { chats: newChats, nextLinks: newNextLinks } = await getChats();
+            // Seleziona i bot da aggiornare
+            const botsToFetch = specificBotId 
+                ? userBots.filter(b => b.botId === specificBotId) 
+                : (activeBotId ? userBots.filter(b => b.botId === activeBotId) : userBots);
+
+            if (botsToFetch.length === 0) {
+                if (isManualRefresh) setIsRefreshing(false);
+                isRefreshingRef.current = false;
+                return;
+            }
+
+            const allChatsPromises = botsToFetch.map(async (bot) => {
+                const { chats, nextLink } = await getChatsForBot(bot.botId, bot.name);
+                return { chats, nextLink, botId: bot.botId };
+            });
+
+            const results = await Promise.all(allChatsPromises);
+            
+            let newChats: Chat[] = [];
+            let newNextLinks: Record<string, string | null> = {};
+
+            results.forEach((result) => {
+                newChats = [...newChats, ...result.chats];
+                newNextLinks[result.botId] = result.nextLink;
+            });
 
             setAllChats(prevChats => {
                 const activeChat = selectedChatIdRef.current ? prevChats.find(c => c.id === selectedChatIdRef.current) : null;
-                const chatMap = new Map(prevChats.map(chat => [chat.id, chat]));
+                const chatMap = new Map(prevChats.filter(c => specificBotId ? c.botId !== specificBotId : (activeBotId ? c.botId !== activeBotId : false)).map(chat => [chat.id, chat]));
 
                 newChats.forEach(newChat => {
-                    const existingChat = chatMap.get(newChat.id);
+                    const existingChat = prevChats.find(c => c.id === newChat.id);
                     if (existingChat) {
                         if (existingChat.id === activeChat?.id && existingChat.messagesLoaded) {
                             chatMap.set(newChat.id, {
@@ -362,7 +388,7 @@ export default function ChatLayout() {
                 );
             });
 
-            setNextLinks(newNextLinks);
+            setNextLinks(prev => ({ ...prev, ...newNextLinks }));
             if (isManualRefresh) {
                 toast({ title: 'Chat aggiornate' });
             }
@@ -426,25 +452,26 @@ export default function ChatLayout() {
         const triggerDocRef = doc(firestore, 'realtime_updates', 'global_trigger');
         let isFirstSnapshot = true;
 
-        const unsubscribe = onSnapshot(triggerDocRef, (doc) => {
-            // Ignora la prima lettura automatica all'avvio del listener
+        const unsubscribe = onSnapshot(triggerDocRef, (docSnap) => {
             if (isFirstSnapshot) {
                 isFirstSnapshot = false;
                 return;
             }
+            if (docSnap.metadata.fromCache) return;
 
-            // Ignora gli aggiornamenti provenienti dalla cache locale per evitare loop
-            if (doc.metadata.fromCache) {
-                console.log("Trigger dalla cache, refresh saltato.");
+            const data = docSnap.data();
+            const triggerBotId = data?.botId;
+
+            console.log("Trigger in tempo reale ricevuto, avvio aggiornamento per bot", triggerBotId || "TUTTI");
+
+            // Aggiorna solo se riguarda il bot corrente (o se si visualizzano tutti)
+            // if we have an activeBotId and the trigger is for another bot, ignore it!
+            if (activeBotId && triggerBotId && activeBotId !== triggerBotId) {
                 return;
             }
 
-            console.log("Trigger in tempo reale ricevuto, avvio aggiornamento...");
+            refreshChatList(false, triggerBotId);
 
-            // 1. Aggiorna la lista chat in background
-            refreshChatList(false);
-
-            // 2. Se una chat è aperta, aggiorna anche i suoi messaggi in background
             if (selectedChatIdRef.current) {
                 refreshActiveChatMessages(selectedChatIdRef.current);
             }
@@ -525,6 +552,13 @@ export default function ChatLayout() {
 
     const filteredAndSortedChats = useMemo(() => {
         let intermediateChats = [...allChats];
+        if (activeBotId) {
+            intermediateChats = intermediateChats.filter(chat => chat.botId === activeBotId);
+        } else {
+            // se 'Tutti i bot', mostra solo quelli consentiti all'utente
+            const allowedBotIds = new Set(userBots.map(b => b.botId));
+            intermediateChats = intermediateChats.filter(chat => allowedBotIds.has(chat.botId));
+        }
 
         if (filters.status !== 'all') {
             intermediateChats = intermediateChats.filter(chat =>
@@ -583,7 +617,7 @@ export default function ChatLayout() {
         });
 
         return intermediateChats;
-    }, [allChats, searchQuery, filters, currentUser]);
+    }, [allChats, searchQuery, filters, currentUser, activeBotId, userBots]);
 
 
     const chatsWithOperatorDetails = useMemo(() => {
@@ -1004,14 +1038,14 @@ export default function ChatLayout() {
     return (
         <div className="h-screen w-full flex flex-col bg-background text-foreground overflow-hidden">
             <div className={cn("shrink-0", isMobile && "hidden")}>
-                <Header onContactAdded={handleContactAdded} bots={bots} />
+                <Header onContactAdded={handleContactAdded} bots={userBots} />
             </div>
 
             {isMobile && <MobileHeader
                 selectedChatId={selectedChatId}
                 setSelectedChatId={setSelectedChatId}
                 selectedChat={selectedChat}
-                bots={bots}
+                bots={userBots}
                 botVariables={botVariables}
                 allTags={allTags}
                 handleUpdateChat={handleUpdateChat}

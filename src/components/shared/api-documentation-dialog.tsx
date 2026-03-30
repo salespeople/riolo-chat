@@ -31,17 +31,6 @@ interface ApiDocumentationDialogProps {
 
 const apiEndpoints = [
   {
-    title: 'Creare una Prescrizione',
-    method: 'POST',
-    endpoint: '/api/prescriptions',
-    when: "Viene chiamata da un sistema esterno (es. gestionale) per registrare una nuova prescrizione medica nel database. Richiede autenticazione tramite API Key.",
-    payload: `{\n  "patientName": "Mario Rossi",\n  "fiscalCode": "RSSMRA...",\n  "prescriptionCode": "03123...",\n  "regionCode": "190",\n  "priority": "D",\n  "exemptionCode": "048",\n  "diagnosticQuestion": "Controllo",\n  "prescribedExam0": "ESAME 1",\n  "prescribedExam1": "ESAME 2",\n  "prescribedExam2": null,\n  "prescribedExam3": null,\n  "prescribedExam4": null,\n  "appropriateness": "P",\n  "contactID": "12345",\n  "timestamp": "${new Date().toISOString()}",\n  "typeMessage": "Ricetta",\n  "url": "http://example.com/ricetta.pdf"\n}`,
-    headers: `{\n  "Content-Type": "application/json",\n  "Authorization": "Bearer YOUR_API_KEY"\n}`,
-    response: `{\n  "success": true,\n  "message": "Prescription created successfully.",\n  "id": "doc_id_..."\n}`,
-    usage: "Questo endpoint riceve i dati della prescrizione in formato JSON e richiede una chiave API nell'header 'Authorization' come Bearer Token. I dati vengono sanificati e salvati in Firestore.",
-    isTestable: true,
-  },
-  {
     title: 'Webhook da SendPulse',
     method: 'POST',
     endpoint: '/api/sendpulse-webhook',

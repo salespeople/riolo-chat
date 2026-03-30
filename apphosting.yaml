@@ -6,5 +6,7 @@ runConfig:
   concurrency: 80
 
 env:
-  - variable: NEXT_PUBLIC_APP_INSTANCE_ID
-    value: sanicam-chat
+  - variable: SENDPULSE_CLIENT_ID
+    secret: SENDPULSE_CLIENT_ID
+  - variable: SENDPULSE_CLIENT_SECRET
+    secret: SENDPULSE_CLIENT_SECRET

@@ -20,6 +20,7 @@ import { uploadFile } from '@/lib/storage';
 import { Loader2 } from 'lucide-react';
 import { setThemeSettings } from '@/lib/theme';
 import { useFirestore } from '@/firebase';
+import { useBotStore } from '@/stores/bot-store';
 
 // Funzione per convertire HEX in HSL
 function hexToHsl(hex: string): string {
@@ -79,7 +80,7 @@ export default function StyleSettingsDialog({
   const firebaseApp = useFirebaseApp();
   const firestore = useFirestore();
   const auth = useAuth();
-  const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID;
+  const { activeBotId } = useBotStore();
   
   useEffect(() => {
     if (isOpen && !isThemeLoading) {
@@ -165,8 +166,8 @@ export default function StyleSettingsDialog({
       setIsSaving(true);
       try {
         // Salva le impostazioni predefinite nel documento dell'istanza corrente
-        if (firestore && appInstanceId) {
-            await setThemeSettings(firestore, DEFAULT_THEME, appInstanceId);
+        if (firestore && activeBotId) {
+            await setThemeSettings(firestore, DEFAULT_THEME, activeBotId);
             // Aggiorna anche lo stato locale
             await updateTheme(DEFAULT_THEME);
             toast({ title: 'Impostazioni ripristinate', description: 'Lo stile per questa istanza è tornato ai valori predefiniti.' });

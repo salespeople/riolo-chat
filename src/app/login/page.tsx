@@ -50,11 +50,11 @@ export default function LoginPage() {
       }
 
       const userProfile = userDoc.data() as UserProfile;
-      const currentInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID;
+      
 
       // REGOLA DI ACCESSO
       const isAdmin = userProfile.role === 'admin';
-      const hasAccess = Array.isArray(userProfile.instanceId) && currentInstanceId && userProfile.instanceId.includes(currentInstanceId);
+      const hasAccess = userProfile.role === "superadmin" || (Array.isArray(userProfile.botIds) && userProfile.botIds.length > 0);
 
       if (isAdmin || hasAccess) {
         // Accesso consentito

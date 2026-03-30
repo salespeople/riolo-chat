@@ -12,9 +12,12 @@ export interface Bot {
   id: string;
   name: string;
   botId: string;
-  clientId: string;
-  clientSecret: string;
   phone: string;
+  headerColor?: string;
+  headerTitle?: string;
+  logoUrl?: string;
+  logoEmoji?: string;
+  isActive?: boolean;
 }
 
 interface InteractiveButton {
@@ -103,7 +106,7 @@ export interface QuickReply {
   type: 'text' | 'image' | 'document';
   attachment?: string | null; // URL to the attachment
   attachmentName?: string | null; // Name of the attached file
-  instanceId?: string; // App instance ID
+  botId?: string; // Replaced instanceId
   createdAt?: any; // To hold serverTimestamp
 }
 
@@ -113,30 +116,6 @@ export interface PrivacyConsent {
   phone: string;
   timestamp: any;
   consent: boolean;
-}
-
-export interface Prescription {
-  id: string;
-  instanceId: string;
-  phone?: string;
-  appropriateness: string;
-  contactID: string;
-  createdAt: any; // Firestore Timestamp
-  diagnosticQuestion: string;
-  exemptionCode: string;
-  fiscalCode: string;
-  patientName: string;
-  prescribedExam0: string;
-  prescribedExam1: string | null;
-  prescribedExam2: string | null;
-  prescribedExam3: string | null;
-  prescribedExam4: string | null;
-  prescriptionCode: string;
-  priority: string;
-  regionCode: string;
-  timestamp: string;
-  typeMessage: string;
-  url: string;
 }
 
 

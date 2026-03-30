@@ -32,9 +32,21 @@ export async function POST(request: Request) {
       headers: Object.fromEntries(request.headers),
     });
 
+    // Parse payload safely to extract botId
+    let parsedPayload;
+    try {
+        parsedPayload = JSON.parse(rawBody);
+    } catch {
+        parsedPayload = {};
+    }
+    const botId = parsedPayload?.bot_id || parsedPayload?.data?.bot_id || null;
+
     // Aggiorna il trigger per la UI
     const triggerRef = db.collection('realtime_updates').doc('global_trigger');
-    batch.set(triggerRef, { lastUpdate: Timestamp.now() });
+    batch.set(triggerRef, {
+        lastUpdate: Timestamp.now(),
+        botId: botId,
+    });
 
     await batch.commit();
 

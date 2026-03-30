@@ -32,6 +32,7 @@ import { ShieldHalf, User as UserIconRole } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/types';
+import { useBotStore } from '@/stores/bot-store';
 
 interface UsersListDialogProps {
   isOpen: boolean;
@@ -49,6 +50,12 @@ const UserRowSkeleton = () => (
 
 const RoleBadge = ({ role }: { role: UserRole }) => {
   const roleConfig = {
+    superadmin: {
+      label: 'Super Admin',
+      className: 'bg-red-100 text-red-800 border-red-200/80 hover:bg-red-100/90',
+      icon: ShieldHalf,
+      description: 'Accesso completo a tutte le funzionalità.',
+    },
     admin: {
       label: 'Admin',
       className: 'bg-amber-100 text-amber-800 border-amber-200/80 hover:bg-amber-100/90',
@@ -87,17 +94,17 @@ export default function UsersListDialog({ isOpen, onClose }: UsersListDialogProp
   const usersCollection = useMemoFirebase(() => firestore ? collection(firestore, 'users') : null, [firestore]);
   const { data: users, isLoading } = useCollection<UserProfile>(usersCollection);
 
-  const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID;
+  const { activeBotId } = useBotStore();
 
   const filteredOperators = useMemo(() => {
-    if (!users || !appInstanceId) return [];
+    if (!users) return [];
 
     return users.filter(user =>
       user.role === 'operator' &&
-      Array.isArray(user.instanceId) &&
-      user.instanceId.includes(appInstanceId)
+      Array.isArray(user.botIds) &&
+      (activeBotId ? user.botIds.includes(activeBotId) : user.botIds.length > 0)
     );
-  }, [users, appInstanceId]);
+  }, [users, activeBotId]);
 
 
   return (

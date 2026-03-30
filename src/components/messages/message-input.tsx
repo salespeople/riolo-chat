@@ -67,14 +67,12 @@ const MessageInput = React.forwardRef<HTMLTextAreaElement, MessageInputProps>(({
   const [isFlowsLoading, setIsFlowsLoading] = useState(false);
   const [isFlowPopoverOpen, setIsFlowPopoverOpen] = useState(false);
 
-  const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID;
-
   const filteredQuickReplies = useMemo(() => {
     if (!allQuickReplies) return [];
     return allQuickReplies.filter(reply => {
-      return reply.instanceId === appInstanceId || !reply.instanceId;
+      return reply.botId === botId || !reply.botId;
     });
-  }, [allQuickReplies, appInstanceId]);
+  }, [allQuickReplies, botId]);
 
 
   const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
@@ -177,7 +175,7 @@ const MessageInput = React.forwardRef<HTMLTextAreaElement, MessageInputProps>(({
       attachment: replyData.attachment || null,
       attachmentName: replyData.attachmentName || null,
       createdAt: serverTimestamp(),
-      instanceId: appInstanceId,
+      botId: botId,
     };
 
     if (replyData.id) {

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from 'react';
@@ -27,43 +26,62 @@ interface BotsDialogProps {
     onClose: () => void;
 }
 
-const BotForm = ({ bot, onSave, onCancel, isSaving }: { bot: Partial<Bot> | null, onSave: (botData: Omit<Bot, 'id'>) => void, onCancel: () => void, isSaving: boolean }) => {
+type BotFormData = Omit<Bot, 'id'>;
+
+const BotForm = ({ bot, onSave, onCancel, isSaving }: {
+    bot: Partial<Bot> | null;
+    onSave: (botData: BotFormData) => void;
+    onCancel: () => void;
+    isSaving: boolean;
+}) => {
     const [name, setName] = useState(bot?.name || '');
     const [botId, setBotId] = useState(bot?.botId || '');
-    const [clientId, setClientId] = useState(bot?.clientId || '');
-    const [clientSecret, setClientSecret] = useState(bot?.clientSecret || '');
-    const [instanceId, setInstanceId] = useState(bot?.instanceId || '');
+    const [phone, setPhone] = useState(bot?.phone || '');
+    const [headerColor, setHeaderColor] = useState(bot?.headerColor || '#007bc3');
+    const [headerTitle, setHeaderTitle] = useState(bot?.headerTitle || '');
+    const [logoEmoji, setLogoEmoji] = useState(bot?.logoEmoji || '');
+    const [logoUrl, setLogoUrl] = useState(bot?.logoUrl || '');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name || !botId || !clientId || !clientSecret || !instanceId) {
-            // Basic validation
-            return;
-        }
-        onSave({ name, botId, clientId, clientSecret, instanceId });
+        if (!name || !botId) return;
+        onSave({ name, botId, phone, headerColor, headerTitle, logoUrl, logoEmoji });
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4 py-4 border bg-muted/50 p-4 rounded-lg">
-            <div className="space-y-2">
-                <Label htmlFor="bot-name">Nome Bot (Numero)</Label>
-                <Input id="bot-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. 123456789" disabled={isSaving} />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="bot-instanceId">instanceId (App Instance ID)</Label>
-                <Input id="bot-instanceId" value={instanceId} onChange={(e) => setInstanceId(e.target.value)} placeholder="Es. palermo1" disabled={isSaving} />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="bot-id">Bot ID</Label>
-                <Input id="bot-id" value={botId} onChange={(e) => setBotId(e.target.value)} placeholder="ID del bot da SendPulse" disabled={isSaving} />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="client-id">Client ID</Label>
-                <Input id="client-id" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID API" disabled={isSaving} />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="client-secret">Client Secret</Label>
-                <Input id="client-secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="••••••••••••••••" disabled={isSaving} />
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="bot-name">Nome Bot *</Label>
+                    <Input id="bot-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. Riolo Volvo" disabled={isSaving} required />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="bot-id">Bot ID (SendPulse) *</Label>
+                    <Input id="bot-id" value={botId} onChange={(e) => setBotId(e.target.value)} placeholder="ID del bot da SendPulse" disabled={isSaving} required />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="bot-phone">Numero WhatsApp</Label>
+                    <Input id="bot-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+390918488398" disabled={isSaving} />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="bot-headerTitle">Titolo Header</Label>
+                    <Input id="bot-headerTitle" value={headerTitle} onChange={(e) => setHeaderTitle(e.target.value)} placeholder="Es. Riolo Volvo Chat" disabled={isSaving} />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="bot-headerColor">Colore Header</Label>
+                    <div className="flex gap-2">
+                        <input type="color" value={headerColor} onChange={(e) => setHeaderColor(e.target.value)} className="w-10 h-10 rounded border p-1 cursor-pointer" disabled={isSaving} />
+                        <Input value={headerColor} onChange={(e) => setHeaderColor(e.target.value)} placeholder="#007bc3" disabled={isSaving} />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="bot-logoEmoji">Logo Emoji</Label>
+                    <Input id="bot-logoEmoji" value={logoEmoji} onChange={(e) => setLogoEmoji(e.target.value)} placeholder="🚗" disabled={isSaving} />
+                </div>
+                <div className="col-span-2 space-y-2">
+                    <Label htmlFor="bot-logoUrl">Logo URL (opzionale, priorità sull'emoji)</Label>
+                    <Input id="bot-logoUrl" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." disabled={isSaving} />
+                </div>
             </div>
             <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>Annulla</Button>
@@ -86,14 +104,12 @@ export default function BotsDialog({ isOpen, onClose }: BotsDialogProps) {
     const [isSaving, setIsSaving] = useState(false);
     const { toast } = useToast();
 
-    const handleSave = async (botData: Omit<Bot, 'id'>) => {
+    const handleSave = async (botData: BotFormData) => {
         if (!firestore || !botsCollection) return;
         setIsSaving(true);
-
         try {
             const docId = editingBot?.id || doc(botsCollection).id;
             await setDoc(doc(firestore, 'bots', docId), botData, { merge: true });
-
             toast({ title: `Bot ${editingBot?.id ? 'aggiornato' : 'aggiunto'}`, description: `Il bot "${botData.name}" è stato salvato.` });
             setIsFormOpen(false);
             setEditingBot(null);
@@ -104,19 +120,19 @@ export default function BotsDialog({ isOpen, onClose }: BotsDialogProps) {
         }
     };
 
-    const handleDelete = async (botId: string) => {
+    const handleDelete = async (id: string) => {
         if (!firestore) return;
-        await deleteDoc(doc(firestore, 'bots', botId));
-        toast({ title: 'Bot eliminato', description: 'Il bot è stato rimosso con successo.' });
+        await deleteDoc(doc(firestore, 'bots', id));
+        toast({ title: 'Bot eliminato', description: 'Il bot è stato rimosso.' });
     };
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl flex flex-col h-[70vh]">
+            <DialogContent className="max-w-4xl flex flex-col h-[75vh]">
                 <DialogHeader>
                     <DialogTitle>Gestione Bot</DialogTitle>
                     <DialogDescription>
-                        Aggiungi, modifica o elimina le credenziali dei tuoi bot SendPulse. Associa i bot a un ufficio per raggrupparli.
+                        Aggiungi, modifica o elimina i bot WhatsApp. Le credenziali API sono gestite tramite Secret Manager.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -131,21 +147,33 @@ export default function BotsDialog({ isOpen, onClose }: BotsDialogProps) {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Nome (Numero)</TableHead>
-                                            <TableHead>instanceId (App ID)</TableHead>
+                                            <TableHead>Nome</TableHead>
+                                            <TableHead>Numero</TableHead>
                                             <TableHead>Bot ID</TableHead>
+                                            <TableHead>Colore</TableHead>
                                             <TableHead className="text-right">Azioni</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {isLoading ? (
-                                            <TableRow><TableCell colSpan={4}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={5}><Skeleton className="h-8 w-full" /></TableCell></TableRow>
                                         ) : bots && bots.length > 0 ? (
                                             bots.map(bot => (
                                                 <TableRow key={bot.id}>
-                                                    <TableCell className="font-medium">{bot.name}</TableCell>
-                                                    <TableCell>{bot.instanceId}</TableCell>
+                                                    <TableCell className="font-medium">
+                                                        {bot.logoEmoji && <span className="mr-2">{bot.logoEmoji}</span>}
+                                                        {bot.name}
+                                                    </TableCell>
+                                                    <TableCell>{bot.phone || '—'}</TableCell>
                                                     <TableCell className="font-mono text-xs">{bot.botId}</TableCell>
+                                                    <TableCell>
+                                                        {bot.headerColor && (
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-5 h-5 rounded border" style={{ backgroundColor: bot.headerColor }} />
+                                                                <span className="text-xs font-mono">{bot.headerColor}</span>
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
                                                     <TableCell className="text-right">
                                                         <Button variant="ghost" size="icon" onClick={() => { setEditingBot(bot); setIsFormOpen(true); }}>
                                                             <Pencil className="h-4 w-4" />
@@ -158,7 +186,7 @@ export default function BotsDialog({ isOpen, onClose }: BotsDialogProps) {
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="text-center h-24">Nessun bot configurato.</TableCell>
+                                                <TableCell colSpan={5} className="text-center h-24">Nessun bot configurato.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>

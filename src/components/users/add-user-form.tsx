@@ -29,7 +29,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const [formData, setFormData] = useState<Omit<UserInput, 'instanceId'>>({
+  const [formData, setFormData] = useState<Omit<UserInput, 'botIds'>>({
     email: "",
     name: "",
     password: "",
@@ -46,7 +46,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (name: keyof Omit<UserInput, 'instanceId'>) => (value: string) => {
+  const handleSelectChange = (name: keyof Omit<UserInput, 'botIds'>) => (value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -55,11 +55,9 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
     setIsSubmitting(true);
     setErrors(null);
 
-    const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID || '';
-
     const dataToValidate: UserInput = {
       ...formData,
-      instanceId: appInstanceId,
+      botIds: [],
     };
 
     const validation = userInputSchema.safeParse(dataToValidate);

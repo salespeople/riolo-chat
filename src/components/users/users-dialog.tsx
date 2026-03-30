@@ -40,6 +40,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/types';
+import { useBotStore } from '@/stores/bot-store';
 
 interface UsersDialogProps {
   isOpen: boolean;
@@ -59,11 +60,17 @@ const UserRowSkeleton = () => (
 
 const RoleBadge = ({ role }: { role: UserRole }) => {
   const roleConfig = {
+    superadmin: {
+      label: 'Super Admin',
+      className: 'bg-red-100 text-red-800 border-red-200/80 hover:bg-red-100/90',
+      icon: ShieldHalf,
+      description: 'Accesso completo a tutte le funzionalità.',
+    },
     admin: {
       label: 'Admin',
       className: 'bg-amber-100 text-amber-800 border-amber-200/80 hover:bg-amber-100/90',
       icon: ShieldHalf,
-      description: 'Privilegi amministrativi completi.',
+      description: 'Privilegi amministrativi.',
     },
     operator: {
       label: 'Operator',
@@ -105,23 +112,23 @@ export default function UsersDialog({ isOpen, onClose }: UsersDialogProps) {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const { toast } = useToast();
 
-  const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID;
+  const { activeBotId } = useBotStore();
 
   const filteredUsers = useMemo(() => {
-    if (!users || !appInstanceId) return [];
+    if (!users) return [];
 
     return users.filter(user => {
       // Gli admin sono sempre visibili
       if (user.role === 'admin') {
         return true;
       }
-      // Gli operatori sono visibili solo se l'ID dell'istanza è nel loro array 'instanceId'
-      if (user.role === 'operator' && Array.isArray(user.instanceId)) {
-        return user.instanceId.includes(appInstanceId);
+      // Gli operatori sono visibili solo se hanno accesso al bot attivo
+      if (user.role === 'operator' && Array.isArray(user.botIds)) {
+        return (activeBotId ? user.botIds.includes(activeBotId) : user.botIds.length > 0);
       }
       return false;
     });
-  }, [users, appInstanceId]);
+  }, [users, activeBotId]);
 
 
   const handleEditClick = (user: UserProfile) => {
@@ -188,7 +195,7 @@ export default function UsersDialog({ isOpen, onClose }: UsersDialogProps) {
             setSelectedUser(null);
           }}
           onConfirm={handleConfirmDelete}
-          userName={selectedUser.name || selectedUser.email}
+          userName={selectedUser.name || selectedUser.email || 'Utente'}
         />
       )}
       <Dialog open={isOpen} onOpenChange={onClose}>

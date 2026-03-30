@@ -7,74 +7,68 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function isAdmin() {
-      // Check if the admin claim is explicitly true.
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    function isSuperadmin() {
+      return isSignedIn() && getUserData().role == 'superadmin';
     }
-    
+
+    function isAdminOrAbove() {
+      return isSignedIn() && getUserData().role in ['superadmin', 'admin'];
+    }
+
+    // Bot: leggibili da tutti gli autenticati, scrivibili solo da superadmin
     match /bots/{botId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isSuperadmin();
     }
 
-    match /prescriptions/{prescriptionId} {
-        allow read, write: if isSignedIn();
+    // Users: get dal proprietario o admin+, list da tutti gli autenticati
+    match /users/{userId} {
+      allow get: if request.auth.uid == userId || isAdminOrAbove();
+      allow list: if isSignedIn();
+      allow create, update: if request.auth.uid == userId || isAdminOrAbove();
+      allow delete: if isSuperadmin();
     }
-    
-    match /quick_replies/{quickReplyId} {
+
+    match /quick_replies/{id} {
       allow read, write: if isSignedIn();
     }
 
-    match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if isSignedIn();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
-    }
-    
     match /settings/theme {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrAbove();
+      match /instances/{instanceId} {
         allow read: if isSignedIn();
-        allow write: if isAdmin();
-        
-        match /instances/{instanceId} {
-            allow read: if isSignedIn();
-            allow write: if isAdmin();
-        }
+        allow write: if isAdminOrAbove();
+      }
     }
 
     match /settings/sidebarDisplay {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrAbove();
+      match /instances/{instanceId} {
         allow read: if isSignedIn();
-        allow write: if isAdmin();
-
-        match /instances/{instanceId} {
-             allow read: if isSignedIn();
-             allow write: if isAdmin();
-        }
+        allow write: if isAdminOrAbove();
+      }
     }
 
-    match /privacy_consents/{privacyConsentId} {
+    match /privacy_consents/{id} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdminOrAbove();
     }
-    
-    match /realtime_updates/{chatId} {
+
+    match /realtime_updates/{id} {
       allow read: if isSignedIn();
       allow write: if false; // Server only
     }
-    
-    match /webhook_logs/{logId} {
-      allow read, list: if isAdmin();
+
+    match /webhook_logs/{id} {
+      allow read, list: if isAdminOrAbove();
       allow write: if false; // Server only
     }
 
-    // Explicitly deny access to the old, nested 'prescriptions' collection
-    match /contacts/{contactId}/prescriptions/{prescriptionId} {
-      allow read, write: if false;
-    }
   }
 }

@@ -37,7 +37,7 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
     email: user.email || "",
     role: user.role,
     operatorId: user.operatorId || "",
-    instanceId: user.instanceId || [],
+    botIds: user.botIds || [],
     color: user.color || "#0ea54f",
   });
 
@@ -50,8 +50,8 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
 
   const handleInstanceIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target;
-    const instanceIdArray = value.split(',').map(s => s.trim()).filter(Boolean);
-    setFormData(prev => ({ ...prev, instanceId: instanceIdArray }));
+    const botIdsArray = value.split(',').map(s => s.trim()).filter(Boolean);
+    setFormData(prev => ({ ...prev, botIds: botIdsArray }));
   };
 
   const handleSelectChange = (name: keyof UserEditInput) => (value: string) => {
@@ -127,9 +127,9 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="instanceId">Uffici (separati da virgola)</Label>
-        <Input id="instanceId" name="instanceId" placeholder="palermo1,carini1" value={Array.isArray(formData.instanceId) ? formData.instanceId.join(', ') : ''} onChange={handleInstanceIdChange} disabled={isSubmitting || formData.role === 'admin'} />
-        {getErrorForField("instanceId") && <p className="text-sm font-medium text-destructive">{getErrorForField("instanceId")}</p>}
+        <Label htmlFor="botIds">Uffici (separati da virgola)</Label>
+        <Input id="botIds" name="botIds" placeholder="palermo1,carini1" value={Array.isArray(formData.botIds) ? formData.botIds.join(', ') : ''} onChange={handleInstanceIdChange} disabled={isSubmitting || formData.role === 'admin'} />
+        {getErrorForField("botIds") && <p className="text-sm font-medium text-destructive">{getErrorForField("botIds")}</p>}
       </div>
 
       <div className="space-y-2">

@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { UserPlus, Settings, KeyRound, Palette, BookUser, Wrench, LogOut, Upload, Users, View, Users2, FileText as ApiIcon, FileLock, FileText, Bot, ListTree } from 'lucide-react';
+import { UserPlus, Settings, KeyRound, Palette, BookUser, Wrench, LogOut, Upload, Users, View, Users2, FileText as ApiIcon, FileLock, Bot, ListTree } from 'lucide-react';
 import AddContactDialog from '@/components/contacts/add-contact-dialog';
 import {
   DropdownMenu,
@@ -25,12 +25,13 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import UploadFileDialog from '@/components/shared/upload-file-dialog';
 import { useTheme } from './theme-provider';
+import { useBotStore } from '@/stores/bot-store';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import SidebarDisplaySettingsDialog from '@/components/settings/sidebar-display-settings-dialog';
 import type { Bot, SendPulseBotVariable } from '@/types';
 import ApiDocumentationDialog from '@/components/shared/api-documentation-dialog';
 import PrivacyConsentsDialog from '@/components/shared/privacy-consents-dialog';
 import ImportConsentsDialog from '@/components/shared/import-consents-dialog';
-import PrescriptionsDialog from '@/components/prescriptions/prescriptions-dialog';
 import BotsDialog from '@/components/shared/bots-dialog';
 import WebhookLogsDialog from '@/components/shared/webhook-logs-dialog';
 import { getWhatsappBotVariables } from '@/lib/sendpulse';
@@ -41,6 +42,7 @@ interface HeaderProps {
 }
 
 export default function Header({ onContactAdded, bots }: HeaderProps) {
+  const { activeBotId, setActiveBotId } = useBotStore();
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [isStyleSettingsOpen, setIsStyleSettingsOpen] = useState(false);
   const [isSidebarDisplaySettingsOpen, setIsSidebarDisplaySettingsOpen] = useState(false);
@@ -51,7 +53,6 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
   const [isApiDocOpen, setIsApiDocOpen] = useState(false);
   const [isPrivacyConsentsOpen, setIsPrivacyConsentsOpen] = useState(false);
   const [isImportConsentsOpen, setIsImportConsentsOpen] = useState(false);
-  const [isPrescriptionsOpen, setIsPrescriptionsOpen] = useState(false);
   const [isBotsDialogOpen, setIsBotsDialogOpen] = useState(false);
   const [isWebhookLogsOpen, setIsWebhookLogsOpen] = useState(false);
   
@@ -156,10 +157,6 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
         isOpen={isImportConsentsOpen}
         onClose={() => setIsImportConsentsOpen(false)}
       />
-      <PrescriptionsDialog
-        isOpen={isPrescriptionsOpen}
-        onClose={() => setIsPrescriptionsOpen(false)}
-      />
       <header className="bg-brand text-brand-foreground shadow-md">
         <div className="w-full flex h-16 items-center justify-between px-4 gap-4">
           <div className="flex items-center gap-4">
@@ -181,9 +178,26 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
             {isThemeLoading ? (
                  <Skeleton className="h-6 w-48" />
             ) : (
-                <h1 className="text-xl font-semibold">
-                {theme.headerName}
-                </h1>
+                <div className="flex items-center gap-3">
+                    <h1 className="text-xl font-semibold hidden md:block">
+                        {theme.headerName}
+                    </h1>
+                    {bots.length > 0 && (
+                        <Select value={activeBotId || "all"} onValueChange={(val) => setActiveBotId(val === "all" ? null : val)}>
+                            <SelectTrigger className="w-[180px] h-8 bg-brand-foreground/10 border-none">
+                                <SelectValue placeholder="Tutti i Bot" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {bots.length > 1 && <SelectItem value="all">Tutti i Bot</SelectItem>}
+                                {bots.map(bot => (
+                                    <SelectItem key={bot.id} value={bot.botId}>
+                                        {bot.logoEmoji || '🤖'} {bot.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </div>
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -206,10 +220,6 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
                    <DropdownMenuItem onClick={() => setIsUsersListDialogOpen(true)}>
                     <Users2 className="mr-2 h-4 w-4" />
                     <span>Lista Operatori</span>
-                  </DropdownMenuItem>
-                   <DropdownMenuItem onClick={() => setIsPrescriptionsOpen(true)}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    <span>Ricette</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setIsUploadFileDialogOpen(true)}>
                     <Upload className="mr-2 h-4 w-4" />

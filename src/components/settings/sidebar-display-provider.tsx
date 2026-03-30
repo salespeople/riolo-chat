@@ -5,6 +5,7 @@ import { produce } from 'immer';
 import { useFirestore, useUser } from '@/firebase';
 import { getSidebarDisplaySettings, setSidebarDisplaySettings } from '@/lib/sidebar';
 import { useToast } from '@/hooks/use-toast';
+import { useBotStore } from '@/stores/bot-store';
 
 // Definisce i campi specifici per la sezione Dettagli
 export interface ContactDetailsVisibility {
@@ -69,14 +70,14 @@ export const SidebarDisplayProvider = ({ children }: { children: ReactNode }) =>
   const { toast } = useToast();
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(DEFAULT_DISPLAY_SETTINGS);
   const [isDisplaySettingsLoading, setIsDisplaySettingsLoading] = useState(true);
-  const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID;
+  const { activeBotId } = useBotStore();
 
   useEffect(() => {
     const fetchSettings = async () => {
       if (firestore && user) {
         setIsDisplaySettingsLoading(true);
         try {
-          const storedSettings = await getSidebarDisplaySettings(firestore, appInstanceId);
+          const storedSettings = await getSidebarDisplaySettings(firestore, activeBotId ?? undefined);
           if (storedSettings) {
              const mergedSettings = produce(DEFAULT_DISPLAY_SETTINGS, draft => {
                 draft.pauseAutomation = storedSettings.pauseAutomation ?? draft.pauseAutomation;
@@ -104,7 +105,7 @@ export const SidebarDisplayProvider = ({ children }: { children: ReactNode }) =>
       }
     };
     fetchSettings();
-  }, [firestore, appInstanceId, user, isUserLoading]);
+  }, [firestore, activeBotId, user, isUserLoading]);
 
   const handleSetDisplaySettings = useCallback((updater: Partial<DisplaySettings> | ((draft: DisplaySettings) => void)) => {
     const newSettings = produce(displaySettings, typeof updater === 'function' ? updater : draft => {
@@ -113,15 +114,15 @@ export const SidebarDisplayProvider = ({ children }: { children: ReactNode }) =>
 
     setDisplaySettings(newSettings); // Optimistic update
 
-    if (firestore && user?.role === 'admin' && appInstanceId) {
-      setSidebarDisplaySettings(firestore, newSettings, appInstanceId).catch(error => {
+    if (firestore && user?.role === 'admin' && activeBotId) {
+      setSidebarDisplaySettings(firestore, newSettings, activeBotId).catch(error => {
         console.error("Failed to save sidebar display settings to Firestore", error);
         // Optional: Revert optimistic update on failure
         setDisplaySettings(displaySettings); 
         toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare le impostazioni di visualizzazione.' });
       });
     }
-  }, [displaySettings, firestore, toast, user, appInstanceId]);
+  }, [displaySettings, firestore, toast, user, activeBotId]);
 
   const initializeVariableSettings = useCallback((variableNames: string[]) => {
      handleSetDisplaySettings(draft => {

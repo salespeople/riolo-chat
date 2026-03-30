@@ -7,7 +7,7 @@ import type { UserInput, UserEditInput } from "@/types";
 import { getAuthAdmin, getDb } from "@/lib/firebase-admin";
 import { FieldValue } from 'firebase-admin/firestore';
 
-export async function addUser(userData: UserInput, appInstanceId: string) {
+export async function addUser(userData: UserInput) {
     let createdUserUid: string | undefined = undefined;
     try {
         const authAdmin = getAuthAdmin();
@@ -24,11 +24,12 @@ export async function addUser(userData: UserInput, appInstanceId: string) {
         createdUserUid = userRecord.uid;
 
         // Set custom claims based on role
-        if (userData.role === 'admin') {
+        if (userData.role === 'admin' || userData.role === 'superadmin') {
             await authAdmin.setCustomUserClaims(createdUserUid, { admin: true });
         }
 
-        const instanceIdArray = userData.role === 'admin' ? [] : [appInstanceId];
+        const botIdArray = userData.botIds ? userData.botIds.split(',').map(id => id.trim()).filter(id => id) : [];
+        const finalBotIds = userData.role === 'superadmin' ? [] : botIdArray;
 
         const userRef = db.collection("users").doc(createdUserUid);
         await userRef.set({
@@ -37,7 +38,7 @@ export async function addUser(userData: UserInput, appInstanceId: string) {
             email: userData.email,
             role: userData.role,
             operatorId: userData.operatorId,
-            instanceId: instanceIdArray,
+            botIds: finalBotIds,
             lastLogin: null,
             createdAt: FieldValue.serverTimestamp(),
             color: userData.color || '#0ea54f',
@@ -76,11 +77,11 @@ export async function updateUser(userData: UserEditInput) {
         });
 
         // 2. Set custom claims based on the new role
-        await authAdmin.setCustomUserClaims(userData.uid, { admin: userData.role === 'admin' });
+        await authAdmin.setCustomUserClaims(userData.uid, { admin: userData.role === 'admin' || userData.role === 'superadmin' });
 
-        const instanceIdArray = userData.role === 'admin'
+        const botIdArray = userData.role === 'superadmin'
             ? []
-            : userData.instanceId || [];
+            : userData.botIds || [];
 
 
         // 3. Update Firestore document
@@ -90,7 +91,7 @@ export async function updateUser(userData: UserEditInput) {
             email: userData.email,
             role: userData.role,
             operatorId: userData.operatorId,
-            instanceId: instanceIdArray,
+            botIds: botIdArray,
             color: userData.color,
         });
 
@@ -162,8 +163,7 @@ export async function createUserAction(data: UserInput): Promise<{ success: bool
     }
 
     try {
-        const appInstanceId = process.env.NEXT_PUBLIC_APP_INSTANCE_ID || '';
-        await addUser(validation.data, appInstanceId);
+        await addUser(validation.data);
         revalidatePath("/users");
         return { success: true, message: "Utente creato con successo!" };
     } catch (error: any) {

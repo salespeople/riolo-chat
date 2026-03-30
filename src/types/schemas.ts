@@ -1,7 +1,7 @@
 
 import { z } from 'zod';
 
-export const userRoleSchema = z.enum(["admin", "operator"]);
+export const userRoleSchema = z.enum(["superadmin", "admin", "operator"]);
 
 const hexColorRegex = /^#([0-9A-F]{3}){1,2}$/i;
 
@@ -12,7 +12,7 @@ export const userInputSchema = z.object({
   confirmPassword: z.string(),
   role: userRoleSchema,
   operatorId: z.string().optional(),
-  instanceId: z.string(), // This is a single string, will be converted to array in the action
+  botIds: z.string(), // Comma-separated botIds, will be converted to array in the action
   color: z.string().regex(hexColorRegex, { message: "Formato colore non valido." }).optional(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Le password non coincidono.",
@@ -26,6 +26,6 @@ export const userEditSchema = z.object({
   email: z.string().email({ message: "Inserisci un'email valida." }),
   role: userRoleSchema,
   operatorId: z.string().optional(),
-  instanceId: z.array(z.string()).optional(),
+  botIds: z.array(z.string()).optional(),
   color: z.string().regex(hexColorRegex, { message: "Formato colore non valido." }).optional(),
 });

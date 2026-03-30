@@ -6,7 +6,7 @@ import { useFirebase, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { User as AuthUser } from 'firebase/auth';
 import { doc } from 'firebase/firestore';
 
-export type UserRole = 'admin' | 'operator';
+export type UserRole = 'superadmin' | 'admin' | 'operator';
 
 // Define the shape of the user profile data from Firestore
 export interface UserProfile {
@@ -16,7 +16,7 @@ export interface UserProfile {
   email?: string;
   uid: string;
   operatorId?: string;
-  instanceId?: string[];
+  botIds?: string[];
   color?: string;
 }
 

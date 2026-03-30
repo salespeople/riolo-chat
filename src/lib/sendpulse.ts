@@ -4,17 +4,17 @@
 
 import type { Chat, User, Message, SendPulseContact, AddContactApiResponse, SendPulseApiChat, SendPulseApiMessage, SendPulseContactAPIResponse, WhatsAppTemplate, SendPulseFlow, VariablePayload, SendPulseBotVariable, SendPulseTag, Bot } from '@/types';
 import { agent } from './data';
-import { getAllBots, getBotByBotId } from '@/config/app.config';
 
-// Store the token in memory for reuse, mapped by clientId
-const accessTokenCache: Map<string, { token: string; expires: number }> = new Map();
+// Store the token in memory for reuse
+let tokenCache: { token: string; expires: number } | null = null;
 
 const SENDPULSE_API_BASE_URL = "https://api.sendpulse.com";
+const CLIENT_ID = process.env.SENDPULSE_CLIENT_ID || '';
+const CLIENT_SECRET = process.env.SENDPULSE_CLIENT_SECRET || '';
 
-async function getAccessToken(clientId: string, clientSecret: string): Promise<string | null> {
-    const cached = accessTokenCache.get(clientId);
-    if (cached && cached.expires > Date.now()) {
-        return cached.token;
+async function getAccessToken(): Promise<string | null> {
+    if (tokenCache && tokenCache.expires > Date.now()) {
+        return tokenCache.token;
     }
 
     try {
@@ -23,35 +23,35 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 grant_type: 'client_credentials',
-                client_id: clientId,
-                client_secret: clientSecret,
+                client_id: CLIENT_ID,
+                client_secret: CLIENT_SECRET,
             }),
             cache: 'no-store'
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            console.error(`Failed to get SendPulse access token for client ${clientId}:`, errorData);
+            console.error(`Failed to get SendPulse access token:`, errorData);
             return null;
         }
 
         const data = await response.json();
         const expires = Date.now() + (data.expires_in * 1000);
-        accessTokenCache.set(clientId, { token: data.access_token, expires });
+        tokenCache = { token: data.access_token, expires };
 
-        return data.access_token;
+        return tokenCache.token;
     } catch (error) {
-        console.error(`Error fetching access token for client ${clientId}:`, error);
+        console.error(`Error fetching access token:`, error);
         return null;
     }
 }
 
-async function fetchFromSendPulse(url: string, bot: Bot, options: RequestInit = {}): Promise<any> {
+async function fetchFromSendPulse(url: string, botId?: string, options: RequestInit = {}): Promise<any> {
     const fullUrl = url.startsWith('http') ? url : `${SENDPULSE_API_BASE_URL}${url}`;
 
-    const token = await getAccessToken(bot.clientId, bot.clientSecret);
+    const token = await getAccessToken();
     if (!token) {
-        throw new Error(`Unable to retrieve access token for bot ${bot.name}.`);
+        throw new Error(`Unable to retrieve access token (Requesting bot: ${botId || 'unknown'}).`);
     }
 
     const headers = {
@@ -77,7 +77,7 @@ async function fetchFromSendPulse(url: string, bot: Bot, options: RequestInit = 
     try {
         const data = text ? JSON.parse(text) : {};
         if (!response.ok) {
-            console.error(`SendPulse API Error (${response.status}) on ${fullUrl} for bot ${bot.name}:`, data);
+            console.error(`SendPulse API Error (${response.status}) on ${fullUrl} for bot ${botId || 'unknown'}:`, data);
             return data.success === false ? data : { success: false, error: `API request failed with status ${response.status}` };
         }
         return data.success === undefined ? { ...data, success: true } : data;
@@ -141,55 +141,15 @@ const mapToSendPulseToChat = (apiChat: SendPulseApiChat, botId: string, botName:
     };
 };
 
-interface GetChatsResponse {
-    chats: Chat[];
-    nextLinks: Record<string, string | null>;
-}
 
-export async function getChats(): Promise<GetChatsResponse> {
-    try {
-        const bots = getAllBots();
 
-        if (bots.length === 0) {
-            console.log("No bots configured in app.config.ts, returning an empty chat list.");
-            return { chats: [], nextLinks: {} };
-        }
-
-        const allChatsPromises = bots.map(async (bot) => {
-            const { chats, nextLink } = await getChatsForBot(bot);
-            return { chats, nextLink, botId: bot.id };
-        });
-
-        const results = await Promise.all(allChatsPromises);
-
-        let combinedChats: Chat[] = [];
-        const nextLinks: Record<string, string | null> = {};
-
-        results.forEach((result) => {
-            combinedChats = [...combinedChats, ...result.chats];
-            nextLinks[result.botId] = result.nextLink;
-        });
-
-        combinedChats.sort((a: any, b: any) => {
-            if (!a.lastMessageTimestamp) return 1;
-            if (!b.lastMessageTimestamp) return -1;
-            return new Date(b.lastMessageTimestamp).getTime() - new Date(a.lastMessageTimestamp).getTime()
-        });
-
-        return { chats: combinedChats, nextLinks };
-    } catch (error) {
-        console.error("Error in getChats:", error);
-        return { chats: [], nextLinks: {} };
-    }
-}
-
-export async function getChatsForBot(bot: Bot): Promise<{ chats: Chat[], nextLink: string | null }> {
-    const response = await fetchFromSendPulse(`/whatsapp/chats?bot_id=${bot.botId}&size=150`, bot);
+export async function getChatsForBot(botId: string, botName: string): Promise<{ chats: Chat[], nextLink: string | null }> {
+    const response = await fetchFromSendPulse(`/whatsapp/chats?bot_id=${botId}&size=150`, botId);
     if (!response.success || !Array.isArray(response.data)) {
-        console.error(`Failed to get chats for bot ${bot.name} or invalid data format:`, response);
+        console.error(`Failed to get chats for bot ${botName} or invalid data format:`, response);
         return { chats: [], nextLink: null };
     }
-    const chats = response.data.map((apiChat: SendPulseApiChat) => mapToSendPulseToChat(apiChat, bot.id, bot.name));
+    const chats = response.data.map((apiChat: SendPulseApiChat) => mapToSendPulseToChat(apiChat, botId, botName));
     return {
         chats,
         nextLink: response.links?.next || null,
@@ -197,26 +157,26 @@ export async function getChatsForBot(bot: Bot): Promise<{ chats: Chat[], nextLin
 }
 
 
-export async function fetchNextChatPage(nextUrl: string, bot: Bot): Promise<{ chats: Chat[], nextLink: string | null, botId: string } | null> {
+export async function fetchNextChatPage(nextUrl: string, botId: string, botName: string): Promise<{ chats: Chat[], nextLink: string | null, botId: string } | null> {
     try {
-        const response = await fetchFromSendPulse(nextUrl, bot);
+        const response = await fetchFromSendPulse(nextUrl, botId);
         if (!response.success || !Array.isArray(response.data)) {
-            console.error(`Failed to get next page of chats for bot ${bot.name}:`, response);
-            return { chats: [], nextLink: null, botId: bot.id };
+            console.error(`Failed to get next page of chats for bot ${botName}:`, response);
+            return { chats: [], nextLink: null, botId: botId };
         }
-        const chats = response.data.map((apiChat: SendPulseApiChat) => mapToSendPulseToChat(apiChat, bot.id, bot.name));
+        const chats = response.data.map((apiChat: SendPulseApiChat) => mapToSendPulseToChat(apiChat, botId, botName));
         return {
             chats,
             nextLink: response.links?.next || null,
-            botId: bot.id,
+            botId: botId,
         };
     } catch (error) {
-        console.error(`Error fetching next chat page for bot ${bot.name}:`, error);
+        console.error(`Error fetching next chat page for bot ${botName}:`, error);
         return null;
     }
 }
 
-function mapApiMessageToMessage(apiMsg: SendPulseApiMessage, chatUser: User, bot: Bot): Message {
+function mapApiMessageToMessage(apiMsg: SendPulseApiMessage, chatUser: User, botId: string): Message {
     const sender = apiMsg.direction === 2 ? agent : chatUser;
 
     const messageType = apiMsg.type || (Array.isArray(apiMsg.data.type) ? apiMsg.data.type[0] : apiMsg.data.type);
@@ -241,7 +201,7 @@ function mapApiMessageToMessage(apiMsg: SendPulseApiMessage, chatUser: User, bot
 
             if (imageUrlFromApi) {
                 // Usa il proxy per caricare le immagini on-demand nel browser
-                message.imageUrl = `/api/image-proxy?url=${encodeURIComponent(imageUrlFromApi)}&botId=${encodeURIComponent(bot.botId)}`;
+                message.imageUrl = `/api/image-proxy?url=${encodeURIComponent(imageUrlFromApi)}&botId=${encodeURIComponent(botId)}`;
             } else if (typeof apiMsg.data.image === 'string') {
                 message.imageUrl = apiMsg.data.image;
             } else {
@@ -285,30 +245,16 @@ function mapApiMessageToMessage(apiMsg: SendPulseApiMessage, chatUser: User, bot
 };
 
 
-function findBotById(botId: string): Bot | null {
-    if (!botId) {
-        console.error("findBotById called with an invalid botId.");
-        return null;
-    }
-    const bot = getBotByBotId(botId);
-    if (!bot) {
-        console.error(`Bot with ID ${botId} not found in app.config.ts.`);
-        return null;
-    }
-    return bot as Bot;
-}
+
 
 export async function getMessagesForChat(botId: string, contactId: string, chatUser: User, limit: number = 40): Promise<{ messages: Message[], hasMore: boolean }> {
-    const bot = findBotById(botId);
-    if (!bot) return { messages: [], hasMore: false };
-
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/chats/messages?contact_id=${contactId}&limit=${limit}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/chats/messages?contact_id=${contactId}&limit=${limit}`, botId);
         if (!response.success || !Array.isArray(response.data)) {
             console.error(`Failed to get messages for contact ${contactId}:`, response);
             return { messages: [], hasMore: false };
         }
-        const messages = response.data.map((msg: SendPulseApiMessage) => mapApiMessageToMessage(msg, chatUser, bot));
+        const messages = response.data.map((msg: SendPulseApiMessage) => mapApiMessageToMessage(msg, chatUser, botId));
         const hasMore = response.data.length >= limit;
         return { messages, hasMore };
 
@@ -319,15 +265,12 @@ export async function getMessagesForChat(botId: string, contactId: string, chatU
 }
 
 export async function loadOlderMessages(botId: string, contactId: string, chatUser: User, beforeMessageId: string, limit: number = 40): Promise<{ messages: Message[], hasMore: boolean }> {
-    const bot = findBotById(botId);
-    if (!bot) return { messages: [], hasMore: false };
-
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/chats/messages?contact_id=${contactId}&limit=${limit}&before=${beforeMessageId}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/chats/messages?contact_id=${contactId}&limit=${limit}&before=${beforeMessageId}`, botId);
         if (!response.success || !Array.isArray(response.data)) {
             return { messages: [], hasMore: false };
         }
-        const messages = response.data.map((msg: SendPulseApiMessage) => mapApiMessageToMessage(msg, chatUser, bot));
+        const messages = response.data.map((msg: SendPulseApiMessage) => mapApiMessageToMessage(msg, chatUser, botId));
         const hasMore = response.data.length >= limit;
         return { messages, hasMore };
 
@@ -342,13 +285,10 @@ export async function loadOlderMessages(botId: string, contactId: string, chatUs
 // Here are a few examples:
 
 export async function markChatAsRead(botId: string, contactId: string): Promise<boolean> {
-    const bot = findBotById(botId);
-    if (!bot) return false;
-
     try {
-        await fetchFromSendPulse(`/whatsapp/chats/read`, bot, {
+        await fetchFromSendPulse(`/whatsapp/chats/read`, botId, {
             method: 'POST',
-            body: JSON.stringify({ bot_id: bot.botId, contact_id: contactId })
+            body: JSON.stringify({ bot_id: botId, contact_id: contactId })
         });
         return true;
     } catch (error) {
@@ -358,10 +298,8 @@ export async function markChatAsRead(botId: string, contactId: string): Promise<
 }
 
 export async function closeChat(botId: string, contactId: string): Promise<boolean> {
-    const bot = findBotById(botId);
-    if (!bot) return false;
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/closeChat', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/closeChat', botId, {
             method: 'POST',
             body: JSON.stringify({ contact_id: contactId }),
         });
@@ -373,10 +311,8 @@ export async function closeChat(botId: string, contactId: string): Promise<boole
 }
 
 export async function openChat(botId: string, contactId: string): Promise<boolean> {
-    const bot = findBotById(botId);
-    if (!bot) return false;
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/openChat', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/openChat', botId, {
             method: 'POST',
             body: JSON.stringify({ contact_id: contactId }),
         });
@@ -410,9 +346,6 @@ export async function sendMessage(
     contactId: string,
     message: SendMessagePayload
 ): Promise<SendMessageApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
-
     let messageData;
 
     switch (message.type) {
@@ -433,7 +366,7 @@ export async function sendMessage(
     };
 
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/contacts/send`, bot, {
+        const response = await fetchFromSendPulse(`/whatsapp/contacts/send`, botId, {
             method: 'POST',
             body: JSON.stringify(payload),
         });
@@ -449,9 +382,6 @@ export async function sendTemplateMessage(
     contactId: string,
     template: WhatsAppTemplate
 ): Promise<SendMessageApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
-
     const payload = {
         contact_id: contactId,
         template: {
@@ -464,7 +394,7 @@ export async function sendTemplateMessage(
     };
 
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/contacts/sendTemplate`, bot, {
+        const response = await fetchFromSendPulse(`/whatsapp/contacts/sendTemplate`, botId, {
             method: 'POST',
             body: JSON.stringify(payload),
         });
@@ -485,11 +415,8 @@ export async function sendTemplateMessage(
 
 
 export async function getWhatsappTemplates(botId: string): Promise<WhatsAppTemplate[]> {
-    const bot = findBotById(botId);
-    if (!bot) return [];
-
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/templates?bot_id=${bot.botId}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/templates?bot_id=${botId}`, botId);
         if (!response.success || !Array.isArray(response.data)) {
             console.error("Failed to get templates or invalid data format:", response);
             return [];
@@ -504,11 +431,8 @@ export async function getWhatsappTemplates(botId: string): Promise<WhatsAppTempl
 }
 
 export async function getWhatsappBotVariables(botId: string): Promise<SendPulseBotVariable[]> {
-    const bot = findBotById(botId);
-    if (!bot) return [];
-
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/variables?bot_id=${bot.botId}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/variables?bot_id=${botId}`, botId);
         if (!response.success || !Array.isArray(response.data)) {
             console.error("Failed to get bot variables or invalid data format:", response);
             return [];
@@ -522,11 +446,8 @@ export async function getWhatsappBotVariables(botId: string): Promise<SendPulseB
 
 
 export async function getWhatsappFlows(botId: string): Promise<SendPulseFlow[]> {
-    const bot = findBotById(botId);
-    if (!bot) return [];
-
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/flows?bot_id=${bot.botId}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/flows?bot_id=${botId}`, botId);
         if (!response.success || !Array.isArray(response.data)) {
             console.error("Failed to get flows or invalid data format:", response);
             return [];
@@ -539,11 +460,8 @@ export async function getWhatsappFlows(botId: string): Promise<SendPulseFlow[]> 
 }
 
 export async function getWhatsappTags(botId: string): Promise<SendPulseTag[]> {
-    const bot = findBotById(botId);
-    if (!bot) return [];
-
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/tags?bot_id=${bot.botId}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/tags?bot_id=${botId}`, botId);
         if (!response.success || !Array.isArray(response.data)) {
             console.error("Failed to get tags or invalid data format:", response);
             return [];
@@ -557,10 +475,8 @@ export async function getWhatsappTags(botId: string): Promise<SendPulseTag[]> {
 
 
 export async function getContactDetails(botId: string, contactId: string): Promise<SendPulseContact | null> {
-    const bot = findBotById(botId);
-    if (!bot || !contactId) return null;
     try {
-        const response: SendPulseContactAPIResponse = await fetchFromSendPulse(`/whatsapp/contacts/get?contact_id=${contactId}`, bot);
+        const response: SendPulseContactAPIResponse = await fetchFromSendPulse(`/whatsapp/contacts/get?contact_id=${contactId}`, botId);
         if (response.success && response.data) {
             return response.data;
         }
@@ -573,10 +489,8 @@ export async function getContactDetails(botId: string, contactId: string): Promi
 }
 
 export async function getContactByPhone(botId: string, phone: string): Promise<SendPulseContactAPIResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/contacts/getByPhone?phone=${encodeURIComponent(phone)}&bot_id=${bot.botId}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/contacts/getByPhone?phone=${encodeURIComponent(phone)}&bot_id=${botId}`, botId);
         return response;
     } catch (error) {
         return { success: false, error: (error as Error).message || "Unknown error searching by phone." };
@@ -584,10 +498,8 @@ export async function getContactByPhone(botId: string, phone: string): Promise<S
 }
 
 export async function getContactById(botId: string, id: string): Promise<SendPulseContactAPIResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/contacts/get?contact_id=${id}`, bot);
+        const response = await fetchFromSendPulse(`/whatsapp/contacts/get?contact_id=${id}`, botId);
         return response;
     } catch (error) {
         return { success: false, error: (error as Error).message || "Unknown error searching by ID." };
@@ -595,14 +507,11 @@ export async function getContactById(botId: string, id: string): Promise<SendPul
 }
 
 export async function addContact(botId: string, name: string, phone: string): Promise<AddContactApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
-
     try {
-        const response = await fetchFromSendPulse(`/whatsapp/contacts`, bot, {
+        const response = await fetchFromSendPulse(`/whatsapp/contacts`, botId, {
             method: 'POST',
             body: JSON.stringify({
-                bot_id: bot.botId,
+                bot_id: botId,
                 name: name,
                 phone: phone,
                 tags: [],
@@ -617,10 +526,8 @@ export async function addContact(botId: string, name: string, phone: string): Pr
 }
 
 export async function deleteContactFromSendPulse(botId: string, contactId: string): Promise<boolean> {
-    const bot = findBotById(botId);
-    if (!bot) return false;
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/delete', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/delete', botId, {
             method: 'POST',
             body: JSON.stringify({ contact_id: contactId }),
         });
@@ -637,10 +544,8 @@ interface ApiResponse {
 }
 
 export async function setContactTag(botId: string, contactId: string, tagName: string): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/setTag', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/setTag', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
@@ -654,10 +559,8 @@ export async function setContactTag(botId: string, contactId: string, tagName: s
 }
 
 export async function removeContactTag(botId: string, contactId: string, tagName: string): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/deleteTag', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/deleteTag', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
@@ -671,13 +574,11 @@ export async function removeContactTag(botId: string, contactId: string, tagName
 }
 
 export async function setContactVariables(botId: string, contactId: string, variables: VariablePayload[]): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     if (variables.length === 0) {
         return { success: true };
     }
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/setVariable', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/setVariable', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
@@ -691,10 +592,8 @@ export async function setContactVariables(botId: string, contactId: string, vari
 }
 
 export async function deleteContactVariable(botId: string, contactId: string, variableName: string): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/deleteVariable', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/deleteVariable', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
@@ -712,10 +611,8 @@ export async function setPauseAutomation(
     contactId: string,
     minutes: number
 ): Promise<ApiResponse & { data?: string }> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/setPauseAutomation', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/setPauseAutomation', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
@@ -732,10 +629,8 @@ export async function deletePauseAutomation(
     botId: string,
     contactId: string
 ): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/deletePauseAutomation', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/deletePauseAutomation', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
@@ -748,9 +643,6 @@ export async function deletePauseAutomation(
 }
 
 export async function assignContactToOperator(botId: string, contactId: string, operatorId: string | null): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
-
     let endpoint: string;
     let payload: object;
 
@@ -772,7 +664,7 @@ export async function assignContactToOperator(botId: string, contactId: string, 
     }
 
     try {
-        const response = await fetchFromSendPulse(endpoint, bot, {
+        const response = await fetchFromSendPulse(endpoint, botId, {
             method: 'POST',
             body: JSON.stringify(payload),
         });
@@ -784,14 +676,12 @@ export async function assignContactToOperator(botId: string, contactId: string, 
 
 
 export async function addContactNote(botId: string, contactId: string, noteText: string): Promise<ApiResponse & { data?: Message }> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const apiResponse = await fetchFromSendPulse('/whatsapp/contacts/createNote', bot, {
+        const apiResponse = await fetchFromSendPulse('/whatsapp/contacts/createNote', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
-                bot_id: bot.botId,
+                bot_id: botId,
                 text: noteText,
             }),
         });
@@ -821,14 +711,12 @@ export async function addContactNote(botId: string, contactId: string, noteText:
 }
 
 export async function deleteContactNote(botId: string, contactId: string, noteId: string): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/deleteNote', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/deleteNote', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
-                bot_id: bot.botId,
+                bot_id: botId,
                 note_id: noteId,
             }),
         });
@@ -839,14 +727,12 @@ export async function deleteContactNote(botId: string, contactId: string, noteId
 }
 
 export async function updateContactNote(botId: string, contactId: string, noteId: string, text: string): Promise<ApiResponse> {
-    const bot = findBotById(botId);
-    if (!bot) return { success: false, error: "Bot configuration not found." };
     try {
-        const response = await fetchFromSendPulse('/whatsapp/contacts/updateNote', bot, {
+        const response = await fetchFromSendPulse('/whatsapp/contacts/updateNote', botId, {
             method: 'POST',
             body: JSON.stringify({
                 contact_id: contactId,
-                bot_id: bot.botId,
+                bot_id: botId,
                 note_id: noteId,
                 text: text,
             }),
