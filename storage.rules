@@ -1,0 +1,18 @@
+
+service firebase.storage {
+  match /b/toscano-medical-chat.appspot.com/o {
+    
+    // Secure rule for user-specific uploads.
+    // Only the owner can write, but any authenticated user can read.
+    match /uploads/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Shared rule for quick reply attachments.
+    // Any authenticated user can read and write to this folder.
+    match /quick_replies/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

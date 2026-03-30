@@ -1,0 +1,80 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      // Check if the admin claim is explicitly true.
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    match /bots/{botId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /prescriptions/{prescriptionId} {
+        allow read, write: if isSignedIn();
+    }
+    
+    match /quick_replies/{quickReplyId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    match /settings/theme {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+        
+        match /instances/{instanceId} {
+            allow read: if isSignedIn();
+            allow write: if isAdmin();
+        }
+    }
+
+    match /settings/sidebarDisplay {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+
+        match /instances/{instanceId} {
+             allow read: if isSignedIn();
+             allow write: if isAdmin();
+        }
+    }
+
+    match /privacy_consents/{privacyConsentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    
+    match /realtime_updates/{chatId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Server only
+    }
+    
+    match /webhook_logs/{logId} {
+      allow read, list: if isAdmin();
+      allow write: if false; // Server only
+    }
+
+    // Explicitly deny access to the old, nested 'prescriptions' collection
+    match /contacts/{contactId}/prescriptions/{prescriptionId} {
+      allow read, write: if false;
+    }
+  }
+}
