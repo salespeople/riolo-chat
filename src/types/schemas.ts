@@ -12,7 +12,7 @@ export const userInputSchema = z.object({
   confirmPassword: z.string(),
   role: userRoleSchema,
   operatorId: z.string().optional(),
-  botIds: z.string(), // Comma-separated botIds, will be converted to array in the action
+  botId: z.string(), // Bot ID assigned to the user
   color: z.string().regex(hexColorRegex, { message: "Formato colore non valido." }).optional(),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Le password non coincidono.",
@@ -26,6 +26,6 @@ export const userEditSchema = z.object({
   email: z.string().email({ message: "Inserisci un'email valida." }),
   role: userRoleSchema,
   operatorId: z.string().optional(),
-  botIds: z.array(z.string()).optional(),
+  botId: z.string().optional(),
   color: z.string().regex(hexColorRegex, { message: "Formato colore non valido." }).optional(),
 });

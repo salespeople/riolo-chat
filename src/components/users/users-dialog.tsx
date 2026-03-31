@@ -123,8 +123,8 @@ export default function UsersDialog({ isOpen, onClose }: UsersDialogProps) {
         return true;
       }
       // Gli operatori sono visibili solo se hanno accesso al bot attivo
-      if (user.role === 'operator' && Array.isArray(user.botIds)) {
-        return (activeBotId ? user.botIds.includes(activeBotId) : user.botIds.length > 0);
+      if (user.role === 'operator' && user.botId) {
+        return (activeBotId ? user.botId === activeBotId : !!user.botId);
       }
       return false;
     });

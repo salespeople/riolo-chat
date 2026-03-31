@@ -239,9 +239,16 @@ export default function ChatLayout() {
 
     const [nextLinks, setNextLinks] = useState<Record<string, string | null>>({});
 
+    const { user: currentUser } = useUser();
     const { bots, activeBotId, setActiveBotId, setBots } = useBotStore();
     const userBots = useUserBots(bots, currentUser);
     const displayedBots = userBots;
+
+    // DEBUG: trace chat loading flow
+    console.log("🔍 DEBUG currentUser:", currentUser?.email, "role:", currentUser?.role, "botId:", currentUser?.botId);
+    console.log("🔍 DEBUG bots from store:", bots.map(b => ({ id: b.id, botId: b.botId, name: b.name })));
+    console.log("🔍 DEBUG userBots:", userBots.map(b => ({ id: b.id, botId: b.botId, name: b.name })));
+    console.log("🔍 DEBUG activeBotId:", activeBotId);
     const [botVariables, setBotVariables] = useState<SendPulseBotVariable[]>([]);
     const [allTags, setAllTags] = useState<SendPulseTag[]>([]);
 
@@ -271,7 +278,6 @@ export default function ChatLayout() {
     const firebaseApp = useFirebaseApp();
     const auth = useAuth();
     const firestore = useFirestore();
-    const { user: currentUser } = useUser();
     const { isThemeLoading } = useTheme();
     const isMobile = useIsMobile();
     const [isChatColumnVisible, setIsChatColumnVisible] = useState(false);
@@ -313,8 +319,8 @@ export default function ChatLayout() {
         return allUsers.filter(user =>
             user.role === 'operator' &&
             user.operatorId &&
-            Array.isArray(user.botIds) &&
-            (activeBotId ? user.botIds.includes(activeBotId) : true)
+            user.botId &&
+            (activeBotId ? user.botId === activeBotId : true)
         );
     }, [allUsers, activeBotId]);
 
@@ -338,11 +344,14 @@ export default function ChatLayout() {
         if (!isManualRefresh) console.log("🔄 Trigger ricevuto, aggiorno la lista chat...");
         try {
             // Seleziona i bot da aggiornare
-            const botsToFetch = specificBotId 
-                ? userBots.filter(b => b.botId === specificBotId) 
+            const botsToFetch = specificBotId
+                ? userBots.filter(b => b.botId === specificBotId)
                 : (activeBotId ? userBots.filter(b => b.botId === activeBotId) : userBots);
 
+            console.log("🔍 DEBUG botsToFetch:", botsToFetch.map(b => ({ botId: b.botId, name: b.name })));
+
             if (botsToFetch.length === 0) {
+                console.log("🔍 DEBUG botsToFetch is EMPTY, skipping fetch");
                 if (isManualRefresh) setIsRefreshing(false);
                 isRefreshingRef.current = false;
                 return;
@@ -354,7 +363,7 @@ export default function ChatLayout() {
             });
 
             const results = await Promise.all(allChatsPromises);
-            
+
             let newChats: Chat[] = [];
             let newNextLinks: Record<string, string | null> = {};
 
@@ -401,7 +410,7 @@ export default function ChatLayout() {
             if (isManualRefresh) setIsRefreshing(false);
             isRefreshingRef.current = false;
         }
-    }, [toast]);
+    }, [toast, userBots, activeBotId]);
 
     const refreshActiveChatMessages = useCallback(async (chatId: string) => {
         const chat = allChatsRef.current.find(c => c.id === chatId);
@@ -556,8 +565,8 @@ export default function ChatLayout() {
             intermediateChats = intermediateChats.filter(chat => chat.botId === activeBotId);
         } else {
             // se 'Tutti i bot', mostra solo quelli consentiti all'utente
-            const allowedBotIds = new Set(userBots.map(b => b.botId));
-            intermediateChats = intermediateChats.filter(chat => allowedBotIds.has(chat.botId));
+            const allowedbotId = new Set(userBots.map(b => b.botId));
+            intermediateChats = intermediateChats.filter(chat => allowedbotId.has(chat.botId));
         }
 
         if (filters.status !== 'all') {

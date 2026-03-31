@@ -6,8 +6,8 @@ export function useUserBots(allBots: Bot[], user: UserData | null) {
     return useMemo(() => {
         if (!user || !allBots.length) return [];
         if (user.role === 'superadmin') return allBots;
-        
-        // Admin and operator: only bots in their botIds
-        return allBots.filter((bot) => user.botIds && user.botIds.includes(bot.botId));
+
+        // Admin and operator: only bots in their botId
+        return allBots.filter((bot) => user.botId && user.botId === bot.botId);
     }, [user, allBots]);
 }

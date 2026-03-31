@@ -29,7 +29,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
-  const [formData, setFormData] = useState<Omit<UserInput, 'botIds'>>({
+  const [formData, setFormData] = useState<Omit<UserInput, 'botId'>>({
     email: "",
     name: "",
     password: "",
@@ -46,7 +46,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (name: keyof Omit<UserInput, 'botIds'>) => (value: string) => {
+  const handleSelectChange = (name: keyof Omit<UserInput, 'botId'>) => (value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -57,7 +57,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
 
     const dataToValidate: UserInput = {
       ...formData,
-      botIds: [],
+      botId: '',
     };
 
     const validation = userInputSchema.safeParse(dataToValidate);

@@ -101,8 +101,8 @@ export default function UsersListDialog({ isOpen, onClose }: UsersListDialogProp
 
     return users.filter(user =>
       user.role === 'operator' &&
-      Array.isArray(user.botIds) &&
-      (activeBotId ? user.botIds.includes(activeBotId) : user.botIds.length > 0)
+      user.botId &&
+      (activeBotId ? user.botId === activeBotId : !!user.botId)
     );
   }, [users, activeBotId]);
 

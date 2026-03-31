@@ -16,7 +16,7 @@ export interface UserProfile {
   email?: string;
   uid: string;
   operatorId?: string;
-  botIds?: string[];
+  botId?: string;
   color?: string;
 }
 

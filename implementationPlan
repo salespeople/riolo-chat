@@ -75,7 +75,7 @@ users/{uid}
 ├── name: "Mario Rossi"
 ├── email: "mario@riolo.it"
 ├── role: "superadmin" | "admin" | "operator"
-├── botIds: ["68cbe42e...", "abc123..."]   // bot accessibili (rinominato da instanceId)
+├── botId: ["68cbe42e...", "abc123..."]   // bot accessibili (rinominato da instanceId)
 ├── operatorId: "12345"                     // ID operatore SendPulse
 ├── color: "#0ea54f"
 ├── lastLogin: Timestamp
@@ -83,7 +83,7 @@ users/{uid}
 ```
 
 **Cambiamenti rispetto a oggi:**
-- `instanceId: string[]` → rinominato in `botIds: string[]` (più chiaro, riferimento diretto ai botId SendPulse)
+- `instanceId: string[]` → rinominato in `botId: string[]` (più chiaro, riferimento diretto ai botId SendPulse)
 - Aggiunto ruolo `superadmin`
 - Rimosso bisogno di `NEXT_PUBLIC_APP_INSTANCE_ID`
 
@@ -92,8 +92,8 @@ users/{uid}
 | Ruolo | Vede chat di | Gestisce utenti | Gestisce bot | Impostazioni |
 |-------|-------------|-----------------|--------------|--------------|
 | **superadmin** | Tutti i bot | ✅ Tutti | ✅ CRUD | ✅ Tutte |
-| **admin** | Solo bot in `botIds[]` | ✅ Nel suo scope | ❌ | Parziale |
-| **operator** | Solo bot in `botIds[]` | ❌ | ❌ | ❌ |
+| **admin** | Solo bot in `botId[]` | ✅ Nel suo scope | ❌ | Parziale |
+| **operator** | Solo bot in `botId[]` | ❌ | ❌ | ❌ |
 
 ### Trigger realtime (evoluzione)
 
@@ -207,11 +207,11 @@ interface ChatStore {
 
 2. useUser() hook
    ├── onSnapshot /users/{uid} ────────────────────────> 1 read (già oggi)
-   └── Estrae role, botIds
+   └── Estrae role, botId
 
 3. useCollection('bots')
    ├── onSnapshot /bots ───────────────────────────────> 1 read (già oggi)
-   └── Client filtra per user.botIds → userBots
+   └── Client filtra per user.botId → userBots
 
 4. UI mostra selettore bot (o auto-seleziona se 1 solo bot)
 
@@ -299,8 +299,8 @@ export function useUserBots(allBots: BotConfig[], user: UserData | null) {
     if (!user || !allBots.length) return [];
     if (user.role === 'superadmin') return allBots;
     
-    // admin e operator: solo bot nel proprio botIds
-    return allBots.filter(bot => user.botIds?.includes(bot.botId));
+    // admin e operator: solo bot nel proprio botId
+    return allBots.filter(bot => user.botId?.includes(bot.botId));
   }, [user, allBots]);
 }
 ```
@@ -347,7 +347,7 @@ onSnapshot(triggerDocRef, (doc) => {
     const triggerBotId = data?.botId;
     
     // Aggiorna solo se il trigger riguarda un bot visibile all'utente
-    if (triggerBotId && userBotIds.includes(triggerBotId)) {
+    if (triggerBotId && userbotId.includes(triggerBotId)) {
         refreshBot(triggerBotId);  // non refreshChatList() globale
     }
     
@@ -446,7 +446,7 @@ service cloud.firestore {
 - [ ] Aggiungere `SENDPULSE_CLIENT_ID` e `SENDPULSE_CLIENT_SECRET` in Secret Manager
 - [ ] Aggiungere le env in `apphosting.yaml`
 - [ ] Arricchire i documenti `bots` in Firestore con i campi UI (`headerColor`, `headerTitle`, `logoUrl`, `logoEmoji`)
-- [ ] Aggiungere campo `botIds` ai documenti `users` esistenti (copia da `instanceId`)
+- [ ] Aggiungere campo `botId` ai documenti `users` esistenti (copia da `instanceId`)
 - [ ] Aggiungere ruolo `superadmin` allo schema e assegnarlo all'utente principale
 - [ ] Installare Zustand: `npm install zustand`
 
@@ -467,7 +467,7 @@ service cloud.firestore {
 ### Fase 4 — Sicurezza e Pulizia
 - [ ] Aggiornare Firestore Rules con supporto `superadmin`
 - [ ] Rimuovere env `NEXT_PUBLIC_APP_INSTANCE_ID`
-- [ ] Migrare campo `instanceId` → `botIds` su tutti i documenti utente
+- [ ] Migrare campo `instanceId` → `botId` su tutti i documenti utente
 - [ ] Rimuovere vecchio codice in `app.config.ts` (instances, getAllBots, ecc.)
 - [ ] Aggiungere UI CRUD per gestione bot (pannello superadmin)
 
@@ -494,7 +494,7 @@ service cloud.firestore {
 │                        │  users/{uid}           │    per bot     │
 │                        │    .role (superadmin/  │                │
 │                        │     admin/operator)    │                │
-│                        │    .botIds[]           │                │
+│                        │    .botId[]           │                │
 │                        │                        │                │
 │                        │  realtime_updates/     │                │
 │                        │    global_trigger      │                │

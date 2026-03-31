@@ -37,7 +37,7 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
     email: user.email || "",
     role: user.role,
     operatorId: user.operatorId || "",
-    botIds: user.botIds || [],
+    botId: user.botId || '',
     color: user.color || "#0ea54f",
   });
 
@@ -50,8 +50,7 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
 
   const handleInstanceIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target;
-    const botIdsArray = value.split(',').map(s => s.trim()).filter(Boolean);
-    setFormData(prev => ({ ...prev, botIds: botIdsArray }));
+    setFormData(prev => ({ ...prev, botId: value.trim() }));
   };
 
   const handleSelectChange = (name: keyof UserEditInput) => (value: string) => {
@@ -127,9 +126,9 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="botIds">Uffici (separati da virgola)</Label>
-        <Input id="botIds" name="botIds" placeholder="palermo1,carini1" value={Array.isArray(formData.botIds) ? formData.botIds.join(', ') : ''} onChange={handleInstanceIdChange} disabled={isSubmitting || formData.role === 'admin'} />
-        {getErrorForField("botIds") && <p className="text-sm font-medium text-destructive">{getErrorForField("botIds")}</p>}
+        <Label htmlFor="botId">Ufficio</Label>
+        <Input id="botId" name="botId" placeholder="palermo1" value={formData.botId || ''} onChange={handleInstanceIdChange} disabled={isSubmitting || formData.role === 'admin'} />
+        {getErrorForField("botId") && <p className="text-sm font-medium text-destructive">{getErrorForField("botId")}</p>}
       </div>
 
       <div className="space-y-2">
