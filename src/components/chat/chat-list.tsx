@@ -20,6 +20,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { useBotStore } from "@/stores/bot-store";
 
 type ChatWithOperator = Chat & {
     assignedOperator: UserProfile | null;
@@ -71,6 +72,7 @@ export default function ChatList({
   onRefresh,
   isRefreshing,
 }: ChatListProps) {
+  const { activeBotId } = useBotStore();
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
 
   const handleSearch = () => {
@@ -279,11 +281,16 @@ export default function ChatList({
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                       {chat.assignedOperator && chat.assignedOperator.color && (
                           <OperatorIndicator color={chat.assignedOperator.color} />
                       )}
                       <p className="truncate font-semibold">{chat.user?.name || chat.user?.id}</p>
+                      {!activeBotId && chat.botName && (
+                        <span className="shrink-0 inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {chat.botName}
+                        </span>
+                      )}
                   </div>
                   {chat.lastMessageTimestamp && (
                     <div className="whitespace-nowrap text-xs text-muted-foreground">

@@ -61,23 +61,23 @@ export default function StyleSettingsDialog({
   isOpen,
   onClose,
 }: StyleSettingsDialogProps) {
-
+  
   const { theme, isThemeLoading } = useTheme();
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_THEME.primaryColor);
   const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor);
   const [headerName, setHeaderName] = useState(DEFAULT_THEME.headerName);
-
+  
   const [isSaving, setIsSaving] = useState(false);
 
   const { toast } = useToast();
   const firestore = useFirestore();
   const { activeBotId, bots } = useBotStore();
-
+  
   useEffect(() => {
     if (isOpen && !isThemeLoading) {
-      setPrimaryColor(theme.primaryColor);
-      setAccentColor(theme.accentColor);
-      setHeaderName(theme.headerName);
+        setPrimaryColor(theme.primaryColor);
+        setAccentColor(theme.accentColor);
+        setHeaderName(theme.headerName);
     }
   }, [isOpen, theme, isThemeLoading]);
 
@@ -88,7 +88,7 @@ export default function StyleSettingsDialog({
     root.style.setProperty('--accent', hexToHsl(accent));
     root.style.setProperty('--destructive', hexToHsl(accent));
   };
-
+  
   const handlePrimaryColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newColor = e.target.value;
     setPrimaryColor(newColor);
@@ -116,23 +116,23 @@ export default function StyleSettingsDialog({
     setIsSaving(true);
 
     try {
-      // Salva direttamente nel documento del bot
-      const botDocRef = doc(firestore, 'bots', activeBot.id);
-      await setDoc(botDocRef, {
-        headerColor: primaryColor,
-        headerTitle: headerName,
-      }, { merge: true });
+        // Salva direttamente nel documento del bot
+        const botDocRef = doc(firestore, 'bots', activeBot.id);
+        await setDoc(botDocRef, {
+            headerColor: primaryColor,
+            headerTitle: headerName,
+        }, { merge: true });
 
-      toast({ title: 'Impostazioni salvate', description: 'Lo stile è stato aggiornato con successo.' });
-      onClose();
+        toast({ title: 'Impostazioni salvate', description: 'Lo stile è stato aggiornato con successo.' });
+        onClose();
     } catch (error) {
-      console.error("Error saving theme:", error);
-      toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare le impostazioni.' });
+        console.error("Error saving theme:", error);
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile salvare le impostazioni.' });
     } finally {
-      setIsSaving(false);
+        setIsSaving(false);
     }
   };
-
+  
   const handleReset = async () => {
     if (!firestore || !activeBotId) return;
 
@@ -141,21 +141,21 @@ export default function StyleSettingsDialog({
 
     setIsSaving(true);
     try {
-      const botDocRef = doc(firestore, 'bots', activeBot.id);
-      await setDoc(botDocRef, {
-        headerColor: DEFAULT_THEME.primaryColor,
-        headerTitle: '',
-      }, { merge: true });
+        const botDocRef = doc(firestore, 'bots', activeBot.id);
+        await setDoc(botDocRef, {
+            headerColor: DEFAULT_THEME.primaryColor,
+            headerTitle: '',
+        }, { merge: true });
 
-      toast({ title: 'Impostazioni ripristinate', description: 'Lo stile per questo bot è tornato ai valori predefiniti.' });
-      onClose();
+        toast({ title: 'Impostazioni ripristinate', description: 'Lo stile per questo bot è tornato ai valori predefiniti.' });
+        onClose();
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile ripristinare le impostazioni.' });
+        toast({ variant: 'destructive', title: 'Errore', description: 'Impossibile ripristinare le impostazioni.' });
     } finally {
-      setIsSaving(false);
+        setIsSaving(false);
     }
   };
-
+  
   const handleClose = () => {
     applyPreviewColors(theme.primaryColor, theme.accentColor);
     onClose();
@@ -173,22 +173,22 @@ export default function StyleSettingsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-muted-foreground">Nome Header</h3>
-            <Input
-              id="headerName"
-              value={headerName}
-              onChange={(e) => setHeaderName(e.target.value)}
-              placeholder="Inserisci nome header"
-              disabled={isLoading}
-            />
-          </div>
-          <div className="border-t" />
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-muted-foreground">Colori</h3>
-            <ColorInput label="Colore Primario" value={primaryColor} onChange={handlePrimaryColorChange} disabled={isLoading} />
-            <ColorInput label="Colore Secondario" value={accentColor} onChange={handleAccentColorChange} disabled={isLoading} />
-          </div>
+             <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Nome Header</h3>
+                <Input
+                    id="headerName"
+                    value={headerName}
+                    onChange={(e) => setHeaderName(e.target.value)}
+                    placeholder="Inserisci nome header"
+                    disabled={isLoading}
+                />
+            </div>
+            <div className="border-t" />
+            <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground">Colori</h3>
+                <ColorInput label="Colore Primario" value={primaryColor} onChange={handlePrimaryColorChange} disabled={isLoading} />
+                <ColorInput label="Colore Secondario" value={accentColor} onChange={handleAccentColorChange} disabled={isLoading} />
+            </div>
         </div>
         <DialogFooter className="justify-between sm:justify-between w-full">
           <Button variant="ghost" onClick={handleReset} disabled={isLoading}>
@@ -196,10 +196,10 @@ export default function StyleSettingsDialog({
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleClose} disabled={isLoading}>
-              Annulla
+                Annulla
             </Button>
             <Button onClick={handleSave} disabled={isLoading || !activeBotId}>
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salva e Chiudi'}
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salva e Chiudi'}
             </Button>
           </div>
         </DialogFooter>
@@ -210,29 +210,29 @@ export default function StyleSettingsDialog({
 
 // Componente helper per l'input con picker
 const ColorInput = ({ label, value, onChange, disabled }: { label: string, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, disabled?: boolean }) => {
-  return (
-    <div className="flex items-center justify-between">
-      <Label htmlFor={label.toLowerCase()} className="font-medium">{label}</Label>
-      <div className="flex items-center gap-2">
-        <Input
-          id={`${label.toLowerCase()}Hex`}
-          value={value}
-          onChange={onChange}
-          className="w-24 p-1 h-8"
-          disabled={disabled}
-        />
-        <input
-          id={label.toLowerCase()}
-          type="color"
-          value={value}
-          onChange={onChange}
-          className="w-8 h-8 p-0 border-none rounded-md cursor-pointer bg-transparent disabled:cursor-not-allowed"
-          title={`Seleziona un ${label.toLowerCase()}`}
-          disabled={disabled}
-        />
-      </div>
-    </div>
-  );
+    return (
+        <div className="flex items-center justify-between">
+            <Label htmlFor={label.toLowerCase()} className="font-medium">{label}</Label>
+            <div className="flex items-center gap-2">
+                <Input
+                    id={`${label.toLowerCase()}Hex`}
+                    value={value}
+                    onChange={onChange}
+                    className="w-24 p-1 h-8"
+                    disabled={disabled}
+                />
+                <input
+                    id={label.toLowerCase()}
+                    type="color"
+                    value={value}
+                    onChange={onChange}
+                    className="w-8 h-8 p-0 border-none rounded-md cursor-pointer bg-transparent disabled:cursor-not-allowed"
+                    title={`Seleziona un ${label.toLowerCase()}`}
+                    disabled={disabled}
+                />
+            </div>
+        </div>
+    );
 };
 
 // Input di ShadCN per evitare errori

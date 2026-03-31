@@ -88,8 +88,8 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
     return name.substring(0, 2).toUpperCase();
   };
 
-  const canViewSettings = user?.role === 'admin';
-  const canSwitchBot = user?.role === 'superadmin' || (user?.role === 'admin' && bots.length > 1);
+  const canViewSettings = user?.role === 'superadmin';
+  const canSwitchBot = user?.role === 'superadmin' || bots.length > 1;
 
   // Find the active bot to display its name and phone
   const activeBot = activeBotId

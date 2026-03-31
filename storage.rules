@@ -1,6 +1,6 @@
 
 service firebase.storage {
-  match /b/toscano-medical-chat.appspot.com/o {
+  match /b/riolo-chat.firebasestorage.app/o {
     
     // Secure rule for user-specific uploads.
     // Only the owner can write, but any authenticated user can read.

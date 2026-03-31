@@ -1,0 +1,530 @@
+# Architettura Multi-Tenant — Riolo Chat Manager
+
+## 1. Analisi dello Stato Attuale
+
+### Cosa funziona bene e va mantenuto
+- **Token cache in-memory** (`accessTokenCache` in `sendpulse.ts`) — già ottimizzata
+- **`app.config.ts`** con lookup O(1) via `Map` — zero letture DB per configurazione bot
+- **Realtime trigger** via Firestore `onSnapshot` su `realtime_updates/globalTrigger` — pattern efficiente
+- **Ruoli `admin`/`operator`** con `instanceId[]` sul profilo utente — base solida per il multi-tenant
+- **Collection `bots`** già presente in Firestore e già letta con `useCollection`
+
+### Problemi da risolvere
+- **Nessun filtro per bot/istanza lato chat-list**: `getChats()` carica TUTTI i bot, indipendentemente dai permessi utente
+- **Ruolo `superadmin` assente**: oggi `admin` vede tutto, ma non c'è distinzione tra admin globale e admin di istanza
+- **Credenziali hardcoded** in `app.config.ts`: `clientId`/`clientSecret` nel codice sorgente
+- **Nessun bot-switching UI**: l'header mostra un nome statico, non c'è selettore per filtrare per bot
+- **`NEXT_PUBLIC_APP_INSTANCE_ID`** come env singola: limita il multi-istanza
+
+---
+
+## 2. Principio Guida: Credenziali in Secret Manager, Config in Firestore
+
+Dato che **tutti i bot di Riolo condividono le stesse credenziali SendPulse** (`clientId` e `clientSecret`), queste vengono trattate come secret di progetto e NON salvate in database.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SECRET MANAGER / apphosting.yaml                           │
+│                                                              │
+│  SENDPULSE_CLIENT_ID = "165515ea898ccf3b6bb4a582f9fe7c60"   │
+│  SENDPULSE_CLIENT_SECRET = "9365de4cef4a6924ab05cdc8dfeee…" │
+│                                                              │
+│  → Letti 1 volta al boot del server                         │
+│  → Mai esposti al client                                    │
+│  → Mai salvati in Firestore                                 │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  FIRESTORE — Collection "bots" (già esistente)              │
+│                                                              │
+│  → Configurazione specifica per ogni numero/bot             │
+│  → Personalizzazioni UI (colore, titolo, logo)              │
+│  → Letta 1 volta con useCollection (già così oggi)          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Nessuna collection `teams` necessaria.** Se in futuro servisse un secondo team con credenziali diverse, basterà aggiungere un campo `teamId` ai bot e una collection `teams` in quel momento. Per ora sarebbe overengineering.
+
+---
+
+## 3. Struttura Dati Firestore
+
+### Collection `bots` (evoluzione dell'esistente)
+
+```
+bots/{docId}
+├── botId: "68cbe42e..."          // ID SendPulse (univoco)
+├── phone: "+390918488398"
+├── name: "Riolo Volvo"
+├── isActive: true
+├── createdAt: Timestamp
+│
+│   // NUOVI CAMPI — personalizzazione UI per bot
+├── headerColor: "#007bc3"
+├── headerTitle: "Riolo Volvo Chat"
+├── logoUrl: ""                    // opzionale, priorità su emoji
+└── logoEmoji: "🚗"               // fallback se logoUrl è vuoto
+```
+
+Ogni bot = un numero WhatsApp = un'identità visiva nell'interfaccia.
+
+### Collection `users` (evoluzione dell'esistente)
+
+```
+users/{uid}
+├── name: "Mario Rossi"
+├── email: "mario@riolo.it"
+├── role: "superadmin" | "admin" | "operator"
+├── botId: ["68cbe42e...", "abc123..."]   // bot accessibili (rinominato da instanceId)
+├── operatorId: "12345"                     // ID operatore SendPulse
+├── color: "#0ea54f"
+├── lastLogin: Timestamp
+└── createdAt: Timestamp
+```
+
+**Cambiamenti rispetto a oggi:**
+- `instanceId: string[]` → rinominato in `botId: string[]` (più chiaro, riferimento diretto ai botId SendPulse)
+- Aggiunto ruolo `superadmin`
+- Rimosso bisogno di `NEXT_PUBLIC_APP_INSTANCE_ID`
+
+### Matrice dei permessi
+
+| Ruolo | Vede chat di | Gestisce utenti | Gestisce bot | Impostazioni |
+|-------|-------------|-----------------|--------------|--------------|
+| **superadmin** | Tutti i bot | ✅ Tutti | ✅ CRUD | ✅ Tutte |
+| **admin** | Solo bot in `botId[]` | ✅ Nel suo scope | ❌ | Parziale |
+| **operator** | Solo bot in `botId[]` | ❌ | ❌ | ❌ |
+
+### Trigger realtime (evoluzione)
+
+```
+realtime_updates/globalTrigger
+├── lastUpdate: Timestamp
+└── botId: "68cbe42e..."    // NUOVO: quale bot ha ricevuto il messaggio
+```
+
+Aggiungere `botId` al trigger permette al client di aggiornare SOLO le chat del bot interessato, evitando il rifetch globale.
+
+---
+
+## 4. Strategia di Caching — Minimizzare le Letture
+
+### Letture Firestore: identiche a oggi
+
+| Cosa | Come (oggi) | Come (proposta) | Reads |
+|------|-------------|-----------------|-------|
+| Profilo utente | `useDoc('users/{uid}')` | Invariato | 1 (onSnapshot) |
+| Lista utenti | `useCollection('users')` | Invariato | 1 (onSnapshot) |
+| Lista bot | `useCollection('bots')` | Invariato, stessi path | 1 (onSnapshot) |
+| Tema | `useDoc('settings/theme')` | Invariato | 1 (onSnapshot) |
+| Trigger | `onSnapshot('realtime_updates/globalTrigger')` | + campo `botId` | 0 extra |
+
+**Totale: 0 letture aggiuntive rispetto al progetto attuale.**
+
+### Cache lato client: Zustand per stato condiviso
+
+```typescript
+// stores/team-store.ts
+interface TeamStore {
+  bots: BotConfig[];             // tutti i bot dal Firestore
+  userBots: BotConfig[];         // filtrati per permessi utente
+  activeBotId: string | null;    // bot selezionato nell'UI (null = "tutti")
+  
+  // Lookup O(1)
+  botMap: Map<string, BotConfig>;
+  
+  // Azioni
+  setActiveBotId: (id: string | null) => void;
+  getBotById: (id: string) => BotConfig | null;
+}
+```
+
+**Perché Zustand e non Redux?** Il progetto è già leggero, Zustand non richiede Provider wrapper e funziona fuori dai componenti React (utile nelle server actions se necessario).
+
+### Cache lato server: token SendPulse (semplificato)
+
+```typescript
+// lib/sendpulse.ts — SEMPLIFICAZIONE
+
+const CLIENT_ID = process.env.SENDPULSE_CLIENT_ID!;
+const CLIENT_SECRET = process.env.SENDPULSE_CLIENT_SECRET!;
+
+// Una sola entry in cache, non più una Map per clientId
+let tokenCache: { token: string; expires: number } | null = null;
+
+async function getAccessToken(): Promise<string | null> {
+    if (tokenCache && tokenCache.expires > Date.now()) {
+        return tokenCache.token;
+    }
+
+    const response = await fetch(`${SENDPULSE_API_BASE_URL}/oauth/access_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            grant_type: 'client_credentials',
+            client_id: CLIENT_ID,
+            client_secret: CLIENT_SECRET,
+        }),
+        cache: 'no-store'
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    tokenCache = { token: data.access_token, expires: Date.now() + (data.expires_in * 1000) };
+    return tokenCache.token;
+}
+```
+
+Dato che le credenziali sono uniche per progetto, la `Map` diventa una semplice variabile. `fetchFromSendPulse` non ha più bisogno del parametro `bot` per le credenziali — riceve solo il `botId` per le chiamate API.
+
+### Cache chat per bot: stale-while-revalidate
+
+```typescript
+// stores/chat-store.ts
+interface ChatStore {
+  chatsByBot: Map<string, Chat[]>;     // botId → chat[]
+  lastFetchByBot: Map<string, number>; // botId → timestamp ultimo fetch
+  
+  getChatsForBot: (botId: string) => Chat[];
+  refreshBot: (botId: string) => Promise<void>;
+}
+```
+
+**Flusso:**
+1. Utente seleziona un bot → se cache <30s, mostra subito i dati
+2. In background → rifetch da SendPulse e aggiorna lo store
+3. Trigger realtime con `botId` → rifetch SOLO quel bot, non tutti
+
+---
+
+## 5. Flusso di Caricamento Ottimizzato
+
+### Scenario: Operatore apre l'app
+
+```
+1. Login Firebase Auth ────────────────────────────────> 0 reads Firestore
+
+2. useUser() hook
+   ├── onSnapshot /users/{uid} ────────────────────────> 1 read (già oggi)
+   └── Estrae role, botId
+
+3. useCollection('bots')
+   ├── onSnapshot /bots ───────────────────────────────> 1 read (già oggi)
+   └── Client filtra per user.botId → userBots
+
+4. UI mostra selettore bot (o auto-seleziona se 1 solo bot)
+
+5. Utente seleziona "Riolo Volvo"
+   ├── getChatsForBot(botId) ──────────────────────────> 1 API call SendPulse
+   └── Chat list renderizzata
+
+6. Utente clicca su un contatto
+   ├── getMessagesForChat(botId, contactId) ───────────> 1 API call SendPulse
+   └── Messaggi renderizzati
+
+READS FIRESTORE: identiche a oggi (onSnapshot su users, bots, theme, trigger)
+READS AGGIUNTIVE: 0
+API SENDPULSE: 1 per bot aperto + 1 per chat aperta (oggi carica TUTTI i bot)
+```
+
+### Confronto con lo stato attuale
+
+| Operazione | OGGI | PROPOSTA |
+|-----------|------|----------|
+| Boot — Firestore | N reads (users, bots, theme…) | Identiche reads |
+| Boot — SendPulse | N calls (1 per OGNI bot) | 1 call (solo bot attivo) |
+| Switch bot | Non supportato | 0 reads Firestore, 1 API call (o 0 se cache) |
+| Nuovo messaggio | Rifetch TUTTI i bot da SP | Rifetch SOLO il bot coinvolto |
+| Apertura chat | 1 API call | 1 API call (invariato) |
+
+**Il risparmio principale è sulle chiamate SendPulse, non su Firestore.** Oggi `getChats()` chiama l'API per ogni bot in parallelo. Con il bot selector, si carica solo il bot attivo.
+
+---
+
+## 6. Evoluzione del Codice — Cambiamenti Chiave
+
+### 6.1. `apphosting.yaml` — nuovi secret
+
+```yaml
+env:
+  # ... env esistenti ...
+  - variable: SENDPULSE_CLIENT_ID
+    secret: SENDPULSE_CLIENT_ID
+  - variable: SENDPULSE_CLIENT_SECRET
+    secret: SENDPULSE_CLIENT_SECRET
+```
+
+### 6.2. `app.config.ts` — diventa minimale
+
+```typescript
+// config/app.config.ts
+// Solo defaults di fallback per il tema, nessuna credenziale
+export const APP_DEFAULTS = {
+  theme: {
+    primaryColor: "#007bc3",
+    accentColor: "#a4d4f5",
+    logoEmoji: "💬",
+  },
+} as const;
+```
+
+Le credenziali e la lista bot spariscono dal file. I bot vengono letti da Firestore (come già oggi con `useCollection('bots')`), le credenziali da Secret Manager.
+
+### 6.3. `sendpulse.ts` — firma semplificata
+
+```typescript
+// PRIMA: ogni funzione richiedeva un oggetto Bot con clientId/clientSecret
+export async function getChatsForBot(bot: Bot): Promise<...>
+
+// DOPO: basta il botId, le credenziali vengono dalle env
+export async function getChatsForBot(botId: string): Promise<...>
+```
+
+La funzione `fetchFromSendPulse` non riceve più l'intero oggetto `Bot`:
+
+```typescript
+async function fetchFromSendPulse(url: string, options: RequestInit = {}): Promise<any> {
+    const token = await getAccessToken(); // senza parametri
+    // ... resto invariato
+}
+```
+
+### 6.4. Nuovo hook `useUserBots`
+
+```typescript
+// hooks/use-user-bots.ts
+export function useUserBots(allBots: BotConfig[], user: UserData | null) {
+  return useMemo(() => {
+    if (!user || !allBots.length) return [];
+    if (user.role === 'superadmin') return allBots;
+    
+    // admin e operator: solo bot nel proprio botId
+    return allBots.filter(bot => user.botId?.includes(bot.botId));
+  }, [user, allBots]);
+}
+```
+
+### 6.5. `ChatLayout` — caricamento selettivo
+
+Oggi:
+```typescript
+// Carica TUTTE le chat di TUTTI i bot
+const { chats, nextLinks } = await getChats();
+```
+
+Dopo:
+```typescript
+// Carica solo le chat del bot attivo
+const { chats, nextLink } = await getChatsForBot(activeBotId);
+```
+
+Header dinamico:
+```typescript
+const activeBot = teamStore.getBotById(activeBotId);
+// Header usa activeBot.headerColor, activeBot.headerTitle, activeBot.logoEmoji
+```
+
+### 6.6. Webhook — aggiunge `botId` al trigger
+
+```typescript
+// app/api/webhook-receiver/route.ts
+// Nel body del webhook SendPulse c'è il bot_id
+
+const payload = JSON.parse(rawBody);
+const botId = payload?.bot_id || payload?.data?.bot_id || null;
+
+batch.set(triggerRef, { 
+  lastUpdate: Timestamp.now(),
+  botId: botId,    // NUOVO
+});
+```
+
+Lato client, il listener diventa selettivo:
+```typescript
+onSnapshot(triggerDocRef, (doc) => {
+    const data = doc.data();
+    const triggerBotId = data?.botId;
+    
+    // Aggiorna solo se il trigger riguarda un bot visibile all'utente
+    if (triggerBotId && userbotId.includes(triggerBotId)) {
+        refreshBot(triggerBotId);  // non refreshChatList() globale
+    }
+    
+    // Se la chat attiva è di quel bot, aggiorna anche i messaggi
+    if (selectedChat?.botId === triggerBotId) {
+        refreshActiveChatMessages(selectedChatId);
+    }
+});
+```
+
+### 6.7. Firestore Rules aggiornate
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isSuperadmin() {
+      return isSignedIn() && getUserData().role == 'superadmin';
+    }
+    
+    function isAdminOrAbove() {
+      return isSignedIn() && getUserData().role in ['superadmin', 'admin'];
+    }
+
+    // Bot: leggibili da tutti gli autenticati, scrivibili solo da superadmin
+    match /bots/{botId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperadmin();
+    }
+
+    // Users: get dal proprietario o admin+, list da tutti gli autenticati
+    match /users/{userId} {
+      allow get: if request.auth.uid == userId || isAdminOrAbove();
+      allow list: if isSignedIn();
+      allow create, update: if request.auth.uid == userId || isAdminOrAbove();
+      allow delete: if isSuperadmin();
+    }
+
+    // Quick replies, prescriptions, ecc. — invariati
+    match /quickReplies/{id} {
+      allow read, write: if isSignedIn();
+    }
+    
+    match /prescriptions/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /settings/theme {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrAbove();
+      match /instances/{instanceId} {
+        allow read: if isSignedIn();
+        allow write: if isAdminOrAbove();
+      }
+    }
+
+    match /settings/sidebarDisplay {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrAbove();
+      match /instances/{instanceId} {
+        allow read: if isSignedIn();
+        allow write: if isAdminOrAbove();
+      }
+    }
+
+    match /privacy_consents/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrAbove();
+    }
+    
+    match /realtime_updates/{id} {
+      allow read: if isSignedIn();
+      allow write: if false; // Server only
+    }
+    
+    match /webhook_logs/{id} {
+      allow read, list: if isAdminOrAbove();
+      allow write: if false; // Server only
+    }
+  }
+}
+```
+
+---
+
+## 7. Piano di Migrazione Incrementale
+
+### Fase 1 — Configurazione (non rompe nulla)
+- [ ] Aggiungere `SENDPULSE_CLIENT_ID` e `SENDPULSE_CLIENT_SECRET` in Secret Manager
+- [ ] Aggiungere le env in `apphosting.yaml`
+- [ ] Arricchire i documenti `bots` in Firestore con i campi UI (`headerColor`, `headerTitle`, `logoUrl`, `logoEmoji`)
+- [ ] Aggiungere campo `botId` ai documenti `users` esistenti (copia da `instanceId`)
+- [ ] Aggiungere ruolo `superadmin` allo schema e assegnarlo all'utente principale
+- [ ] Installare Zustand: `npm install zustand`
+
+### Fase 2 — Refactor backend (trasparente all'utente)
+- [ ] Modificare `sendpulse.ts`: credenziali da env, firma semplificata
+- [ ] Modificare webhook receiver: aggiungere `botId` al trigger
+- [ ] Rimuovere credenziali da `app.config.ts`
+- [ ] Aggiornare `types/index.ts` e `types/schemas.ts` con nuovo ruolo e campi
+
+### Fase 3 — UI Multi-Bot
+- [ ] Creare Zustand store per bot/team state
+- [ ] Creare hook `useUserBots` con filtro permessi
+- [ ] Aggiungere bot selector nell'header (dropdown o tabs)
+- [ ] Modificare `ChatLayout`: caricamento chat per singolo bot attivo
+- [ ] Header dinamico: colore/titolo/logo cambiano con il bot selezionato
+- [ ] Trigger listener selettivo per `botId`
+
+### Fase 4 — Sicurezza e Pulizia
+- [ ] Aggiornare Firestore Rules con supporto `superadmin`
+- [ ] Rimuovere env `NEXT_PUBLIC_APP_INSTANCE_ID`
+- [ ] Migrare campo `instanceId` → `botId` su tutti i documenti utente
+- [ ] Rimuovere vecchio codice in `app.config.ts` (instances, getAllBots, ecc.)
+- [ ] Aggiungere UI CRUD per gestione bot (pannello superadmin)
+
+---
+
+## 8. Schema Riassuntivo
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DOVE VIVE OGNI DATO                          │
+│                                                                  │
+│  Secret Manager        │  Firestore            │  In-Memory     │
+│  ──────────────────    │  ─────────────────     │  ──────────    │
+│  SENDPULSE_CLIENT_ID   │  bots/{id}            │  Token cache   │
+│  SENDPULSE_CLIENT_SECRET│    .botId             │  (1 entry)     │
+│                        │    .name               │                │
+│                        │    .phone              │  Zustand store │
+│                        │    .headerColor        │    .bots[]     │
+│                        │    .headerTitle        │    .userBots[] │
+│                        │    .logoUrl            │    .activeBotId│
+│                        │    .logoEmoji          │    .botMap     │
+│                        │    .isActive           │                │
+│                        │                        │  Chat cache    │
+│                        │  users/{uid}           │    per bot     │
+│                        │    .role (superadmin/  │                │
+│                        │     admin/operator)    │                │
+│                        │    .botId[]           │                │
+│                        │                        │                │
+│                        │  realtime_updates/     │                │
+│                        │    globalTrigger      │                │
+│                        │    .botId (NUOVO)      │                │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  LETTURE FIRESTORE PER SESSIONE                                 │
+│                                                                  │
+│  Reads aggiuntive rispetto a oggi: 0                            │
+│  (bots, users, theme, trigger — già letti con onSnapshot)       │
+│                                                                  │
+│  CHIAMATE SENDPULSE PER SESSIONE                                │
+│                                                                  │
+│  OGGI:  N calls al boot (1 per OGNI bot configurato)            │
+│  DOPO:  1 call al boot (solo bot attivo)                        │
+│         1 call per switch bot (o 0 se cache <30s)               │
+│         1 call per trigger (solo bot coinvolto, non tutti)       │
+│         1 call per apertura chat (invariato)                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9. Scalabilità Futura
+
+Se in futuro si aggiungesse un secondo team (es. "AutoGruppo") con credenziali SendPulse diverse:
+
+1. Creare una collection `teams/{teamId}` con `clientId`/`clientSecret` per team
+2. Aggiungere campo `teamId` ai documenti `bots` e `users`
+3. Modificare `getAccessToken()` per accettare di nuovo un parametro `teamId`
+
+Ma questo è un refactor minimo e non va fatto ora. L'architettura attuale è già predisposta: basta aggiungere un livello senza ristrutturare.
