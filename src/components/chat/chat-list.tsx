@@ -286,11 +286,15 @@ export default function ChatList({
                           <OperatorIndicator color={chat.assignedOperator.color} />
                       )}
                       <p className="truncate font-semibold">{chat.user?.name || chat.user?.id}</p>
-                      {!activeBotId && chat.botName && (
-                        <span className="shrink-0 inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          {chat.botName}
-                        </span>
-                      )}
+                      {!activeBotId && (() => {
+                        const bot = bots.find(b => b.botId === chat.botId);
+                        const label = bot?.phone || chat.botName;
+                        return label ? (
+                          <span className="shrink-0 inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {label}
+                          </span>
+                        ) : null;
+                      })()}
                   </div>
                   {chat.lastMessageTimestamp && (
                     <div className="whitespace-nowrap text-xs text-muted-foreground">

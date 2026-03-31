@@ -830,9 +830,18 @@ export default function ChatLayout() {
                 throw new Error(response.error || "API error on send message");
             }
 
-            setActiveChatMessages(prev => prev.map(m =>
-                m.id === tempMessageId ? { ...m, status: 2 } : m
-            ));
+            if (file) {
+                // For file messages: remove the optimistic message and let the
+                // real message arrive via refresh, avoiding duplicates
+                setActiveChatMessages(prev => prev.filter(m => m.id !== tempMessageId));
+                // Trigger a refresh to get the real message from the API
+                refreshActiveChatMessages(selectedChatId);
+            } else {
+                // For text messages: just mark as sent
+                setActiveChatMessages(prev => prev.map(m =>
+                    m.id === tempMessageId ? { ...m, status: 2 } : m
+                ));
+            }
 
         } catch (error) {
             console.error("❌ Invio messaggio fallito:", error);
@@ -841,7 +850,7 @@ export default function ChatLayout() {
             ));
             toast({ variant: "destructive", title: "Error", description: "Message failed to send." });
         }
-    }, [selectedChatId, auth, firebaseApp, toast]);
+    }, [selectedChatId, auth, firebaseApp, toast, refreshActiveChatMessages]);
 
     const handleSendQuickReply = useCallback(async (reply: QuickReply) => {
         if (!selectedChatId) return;
