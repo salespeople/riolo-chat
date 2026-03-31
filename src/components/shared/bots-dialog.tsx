@@ -41,12 +41,11 @@ const BotForm = ({ bot, onSave, onCancel, isSaving }: {
     const [secondaryColor, setSecondaryColor] = useState(bot?.secondaryColor || '#a4d4f5');
     const [headerTitle, setHeaderTitle] = useState(bot?.headerTitle || '');
     const [logoEmoji, setLogoEmoji] = useState(bot?.logoEmoji || '');
-    const [logoUrl, setLogoUrl] = useState(bot?.logoUrl || '');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !botId) return;
-        onSave({ name, botId, phone, primaryColor, secondaryColor, headerColor: primaryColor, headerTitle, logoUrl, logoEmoji });
+        onSave({ name, botId, phone, primaryColor, secondaryColor, headerColor: primaryColor, headerTitle, logoEmoji });
     };
 
     return (
@@ -85,10 +84,6 @@ const BotForm = ({ bot, onSave, onCancel, isSaving }: {
                 <div className="space-y-2">
                     <Label htmlFor="bot-logoEmoji">Logo Emoji</Label>
                     <Input id="bot-logoEmoji" value={logoEmoji} onChange={(e) => setLogoEmoji(e.target.value)} placeholder="🚗" disabled={isSaving} />
-                </div>
-                <div className="col-span-2 space-y-2">
-                    <Label htmlFor="bot-logoUrl">Logo URL (opzionale, priorità sull'emoji)</Label>
-                    <Input id="bot-logoUrl" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://..." disabled={isSaving} />
                 </div>
             </div>
             <div className="flex justify-end gap-2">

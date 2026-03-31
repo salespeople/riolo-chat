@@ -2,9 +2,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { UserPlus, Settings, KeyRound, Palette, BookUser, Wrench, LogOut, Upload, Users, View, Users2, FileText as ApiIcon, FileLock, Bot, ListTree } from 'lucide-react';
+import { UserPlus, Settings, Palette, BookUser, Wrench, LogOut, Upload, Users, View, Users2, FileText as ApiIcon, Bot } from 'lucide-react';
 import AddContactDialog from '@/components/contacts/add-contact-dialog';
 import {
   DropdownMenu,
@@ -30,10 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import SidebarDisplaySettingsDialog from '@/components/settings/sidebar-display-settings-dialog';
 import type { Bot, SendPulseBotVariable } from '@/types';
 import ApiDocumentationDialog from '@/components/shared/api-documentation-dialog';
-import PrivacyConsentsDialog from '@/components/shared/privacy-consents-dialog';
-import ImportConsentsDialog from '@/components/shared/import-consents-dialog';
 import BotsDialog from '@/components/shared/bots-dialog';
-import WebhookLogsDialog from '@/components/shared/webhook-logs-dialog';
 import { getWhatsappBotVariables } from '@/lib/sendpulse';
 
 interface HeaderProps {
@@ -51,10 +47,7 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
   const [isUsersListDialogOpen, setIsUsersListDialogOpen] = useState(false);
   const [isUploadFileDialogOpen, setIsUploadFileDialogOpen] = useState(false);
   const [isApiDocOpen, setIsApiDocOpen] = useState(false);
-  const [isPrivacyConsentsOpen, setIsPrivacyConsentsOpen] = useState(false);
-  const [isImportConsentsOpen, setIsImportConsentsOpen] = useState(false);
   const [isBotsDialogOpen, setIsBotsDialogOpen] = useState(false);
-  const [isWebhookLogsOpen, setIsWebhookLogsOpen] = useState(false);
   
   const [botVariables, setBotVariables] = useState<SendPulseBotVariable[]>([]);
   const [isLoadingBotVariables, setIsLoadingBotVariables] = useState(false);
@@ -141,10 +134,6 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
                 isOpen={isBotsDialogOpen}
                 onClose={() => setIsBotsDialogOpen(false)}
             />
-            <WebhookLogsDialog
-              isOpen={isWebhookLogsOpen}
-              onClose={() => setIsWebhookLogsOpen(false)}
-            />
         </>
       )}
       <UsersListDialog
@@ -159,29 +148,11 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
         isOpen={isApiDocOpen}
         onClose={() => setIsApiDocOpen(false)}
       />
-      <PrivacyConsentsDialog
-        isOpen={isPrivacyConsentsOpen}
-        onClose={() => setIsPrivacyConsentsOpen(false)}
-      />
-      <ImportConsentsDialog
-        isOpen={isImportConsentsOpen}
-        onClose={() => setIsImportConsentsOpen(false)}
-      />
       <header className="bg-brand text-brand-foreground shadow-md">
         <div className="w-full flex h-16 items-center justify-between px-4 gap-4">
           <div className="flex items-center gap-4">
             {isThemeLoading ? (
                <Skeleton className="h-10 w-10 rounded-full" />
-            ) : theme.logoUrl ? (
-                <Image
-                src={theme.logoUrl}
-                alt="Header Logo"
-                width={40}
-                height={40}
-                className="rounded-full object-cover"
-                data-ai-hint="medical logo"
-                key={theme.logoUrl} 
-                />
             ) : theme.logoEmoji ? (
                 <span className="text-3xl leading-none" role="img" aria-label="logo">{theme.logoEmoji}</span>
             ) : null}
@@ -265,22 +236,9 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
                     <span>Visualizzazione Sidebar</span>
                   </DropdownMenuItem>
                    <DropdownMenuSeparator />
-                   <DropdownMenuItem onClick={() => setIsWebhookLogsOpen(true)}>
-                    <ListTree className="mr-2 h-4 w-4" />
-                    <span>Log Webhook</span>
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setIsApiDocOpen(true)}>
                     <ApiIcon className="mr-2 h-4 w-4" />
                     <span>Documentazione API</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                   <DropdownMenuItem onClick={() => setIsPrivacyConsentsOpen(true)}>
-                    <FileLock className="mr-2 h-4 w-4" />
-                    <span>Consensi Privacy</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setIsImportConsentsOpen(true)}>
-                    <Upload className="mr-2 h-4 w-4" />
-                    <span>Importa Consensi</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

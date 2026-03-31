@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import type { Chat, SendPulseFlow, WhatsAppTemplate, QuickReply, Message } from "@/types";
+import type { Chat, WhatsAppTemplate, QuickReply, Message } from "@/types";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CardContent, CardHeader } from "@/components/ui/card";
 import { User, MessageSquare, AlertTriangle, Loader2, Info } from "lucide-react";
@@ -27,7 +27,6 @@ type ChatDisplayProps = {
   isLoadingMessages: boolean;
   onSendMessage: (messageText: string, file?: File) => void;
   onSendTemplate: (template: WhatsAppTemplate) => void;
-  onSendFlow: (flow: SendPulseFlow) => void;
   onSendQuickReply: (reply: QuickReply) => void;
   onCloseChat: () => void;
   isClosingChat: boolean;
@@ -80,6 +79,15 @@ const ChatHeader = React.memo(({
         <div className="flex items-center gap-2">
           <p className="font-semibold">{chat.user.name}</p>
           <p className="text-sm text-muted-foreground">- {phoneNumber}</p>
+          {chat.details?.tags && chat.details.tags.length > 0 && (
+            <div className="flex items-center gap-1 ml-1">
+              {chat.details.tags.map((tag) => (
+                <span key={tag} className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -157,7 +165,6 @@ const ChatInputArea = React.memo(({
   onTabChange,
   onSendMessage,
   onSendTemplate,
-  onSendFlow,
   onSendQuickReply,
   isInputDisabled,
   onAddNote
@@ -167,7 +174,6 @@ const ChatInputArea = React.memo(({
   onTabChange: (tab: string) => void;
   onSendMessage: (text: string, file?: File) => void;
   onSendTemplate: (template: WhatsAppTemplate) => void;
-  onSendFlow: (flow: SendPulseFlow) => void;
   onSendQuickReply: (reply: QuickReply) => void;
   isInputDisabled: boolean;
   onAddNote: (noteText: string) => Promise<void>;
@@ -214,7 +220,6 @@ const ChatInputArea = React.memo(({
             botId={botId}
             onSendMessage={onSendMessage}
             onSendTemplate={onSendTemplate}
-            onSendFlow={onSendFlow}
             onSendQuickReply={onSendQuickReply}
             isWindowExpired={isInputDisabled}
           />
@@ -234,7 +239,6 @@ const ChatDisplay = ({
   isLoadingMessages,
   onSendMessage,
   onSendTemplate,
-  onSendFlow,
   onSendQuickReply,
   onCloseChat,
   isClosingChat,
@@ -401,7 +405,6 @@ const ChatDisplay = ({
         onTabChange={setActiveTab}
         onSendMessage={onSendMessage}
         onSendTemplate={onSendTemplate}
-        onSendFlow={onSendFlow}
         onSendQuickReply={onSendQuickReply}
         isInputDisabled={isInputDisabled}
         onAddNote={handleAddNote}

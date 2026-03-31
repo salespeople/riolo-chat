@@ -100,7 +100,10 @@ export default function UsersListDialog({ isOpen, onClose }: UsersListDialogProp
     if (!users) return [];
 
     return users.filter(user => {
-      if (user.role !== 'operator' || !user.botId) return false;
+      // Exclude superadmin
+      if (user.role === 'superadmin') return false;
+      // Include admin and operator if they have access to the active bot
+      if (!user.botId) return false;
       if (!activeBotId) return true;
       const userBotIds = Array.isArray(user.botId) ? user.botId : [user.botId];
       return userBotIds.includes(activeBotId);

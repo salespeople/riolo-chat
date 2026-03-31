@@ -17,7 +17,6 @@ export interface Bot {
   secondaryColor?: string;
   headerColor?: string; // @deprecated - use primaryColor
   headerTitle?: string;
-  logoUrl?: string;
   logoEmoji?: string;
   isActive?: boolean;
 }
@@ -279,7 +278,6 @@ export interface ThemeSettings {
   accentColor: string;
   secondaryColor: string;
   headerName: string;
-  logoUrl: string;
   logoEmoji: string;
 }
 

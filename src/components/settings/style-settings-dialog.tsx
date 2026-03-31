@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,10 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Separator } from '@/components/ui/separator';
 import { useTheme, DEFAULT_THEME } from '@/components/layout/theme-provider';
-import { useAuth, useFirebaseApp, useFirestore } from '@/firebase';
-import { uploadFile } from '@/lib/storage';
+import { useFirestore } from '@/firebase';
 import { Loader2 } from 'lucide-react';
 import { useBotStore } from '@/stores/bot-store';
 import { doc, setDoc } from 'firebase/firestore';
@@ -69,16 +66,11 @@ export default function StyleSettingsDialog({
   const [primaryColor, setPrimaryColor] = useState(DEFAULT_THEME.primaryColor);
   const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor);
   const [headerName, setHeaderName] = useState(DEFAULT_THEME.headerName);
-  const [logoUrl, setLogoUrl] = useState<string>(DEFAULT_THEME.logoUrl);
   
-  const [stagedLogoFile, setStagedLogoFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const firebaseApp = useFirebaseApp();
   const firestore = useFirestore();
-  const auth = useAuth();
   const { activeBotId, bots } = useBotStore();
   
   useEffect(() => {
@@ -86,8 +78,6 @@ export default function StyleSettingsDialog({
         setPrimaryColor(theme.primaryColor);
         setAccentColor(theme.accentColor);
         setHeaderName(theme.headerName);
-        setLogoUrl(theme.logoUrl);
-        setStagedLogoFile(null);
     }
   }, [isOpen, theme, isThemeLoading]);
 
@@ -111,26 +101,6 @@ export default function StyleSettingsDialog({
     applyPreviewColors(primaryColor, newColor);
   };
 
-  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        toast({
-          variant: 'destructive',
-          title: 'File troppo grande',
-          description: 'La dimensione del logo non può superare i 2MB.',
-        });
-        return;
-      }
-      setStagedLogoFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSave = async () => {
     if (!firestore || !activeBotId) {
       toast({ variant: 'destructive', title: 'Errore', description: 'Nessun bot selezionato.' });
@@ -144,19 +114,13 @@ export default function StyleSettingsDialog({
     }
 
     setIsSaving(true);
-    let finalLogoUrl = logoUrl;
 
     try {
-        if (stagedLogoFile) {
-            finalLogoUrl = await uploadFile(firebaseApp, auth, stagedLogoFile, 'uploads');
-        }
-
         // Salva direttamente nel documento del bot
         const botDocRef = doc(firestore, 'bots', activeBot.id);
         await setDoc(botDocRef, {
             headerColor: primaryColor,
             headerTitle: headerName,
-            logoUrl: finalLogoUrl,
         }, { merge: true });
 
         toast({ title: 'Impostazioni salvate', description: 'Lo stile è stato aggiornato con successo.' });
@@ -181,7 +145,6 @@ export default function StyleSettingsDialog({
         await setDoc(botDocRef, {
             headerColor: DEFAULT_THEME.primaryColor,
             headerTitle: '',
-            logoUrl: '',
         }, { merge: true });
 
         toast({ title: 'Impostazioni ripristinate', description: 'Lo stile per questo bot è tornato ai valori predefiniti.' });
@@ -225,37 +188,6 @@ export default function StyleSettingsDialog({
                 <h3 className="text-sm font-medium text-muted-foreground">Colori</h3>
                 <ColorInput label="Colore Primario" value={primaryColor} onChange={handlePrimaryColorChange} disabled={isLoading} />
                 <ColorInput label="Colore Secondario" value={accentColor} onChange={handleAccentColorChange} disabled={isLoading} />
-            </div>
-
-            <Separator />
-            
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground">Logo Header</h3>
-                 <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleLogoFileChange}
-                    className="hidden"
-                    accept="image/png, image/jpeg, image/svg+xml"
-                    disabled={isLoading}
-                />
-                <div className="flex items-center gap-4">
-                    <div className="relative h-16 w-16 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                        <Image 
-                            src={logoUrl} 
-                            alt="Logo preview" 
-                            width={64}
-                            height={64}
-                            className="object-cover h-full w-full"
-                            key={logoUrl}
-                        />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                         <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
-                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Carica Logo'}
-                        </Button>
-                    </div>
-                </div>
             </div>
         </div>
         <DialogFooter className="justify-between sm:justify-between w-full">

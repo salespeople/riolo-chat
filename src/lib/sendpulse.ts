@@ -356,7 +356,7 @@ export async function sendMessage(
             messageData = { type: 'image', image: { link: message.link, caption: message.caption } };
             break;
         case 'document':
-            messageData = { type: 'document', document: { link: message.link, caption: message.caption, filename: message.filename } };
+            messageData = { type: 'document', document: { link: message.link, caption: message.caption } };
             break;
     }
 

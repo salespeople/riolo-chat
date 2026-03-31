@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import ChatList from "@/components/chat/chat-list";
 import ChatDisplay from "@/components/chat/chat-display";
-import type { Chat, Message, WhatsAppTemplate, SendPulseFlow, SendPulseBotVariable, SendPulseTag, QuickReply, ChatFilters, Bot } from "@/types";
+import type { Chat, Message, WhatsAppTemplate, SendPulseBotVariable, SendPulseTag, QuickReply, ChatFilters, Bot } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/layout/header";
 import ChatInfo from "@/components/chat/chat-info";
@@ -96,7 +96,6 @@ const MainContent = ({
     isLoadingMessages,
     handleSendMessage,
     handleSendTemplate,
-    handleSendFlow,
     handleSendQuickReply,
     handleCloseChat,
     isClosingChat,
@@ -135,7 +134,6 @@ const MainContent = ({
     isLoadingMessages: boolean;
     handleSendMessage: (text: string, file?: File) => void;
     handleSendTemplate: (template: WhatsAppTemplate) => void;
-    handleSendFlow: (flow: SendPulseFlow) => void;
     handleSendQuickReply: (reply: QuickReply) => void;
     handleCloseChat: () => void;
     isClosingChat: boolean;
@@ -188,7 +186,6 @@ const MainContent = ({
                             isLoadingMessages={isLoadingMessages}
                             onSendMessage={handleSendMessage}
                             onSendTemplate={handleSendTemplate}
-                            onSendFlow={handleSendFlow}
                             onSendQuickReply={handleSendQuickReply}
                             onCloseChat={handleCloseChat}
                             isClosingChat={isClosingChat}
@@ -922,19 +919,6 @@ export default function ChatLayout() {
         }
     }, [selectedChatId, toast]);
 
-    const handleSendFlow = useCallback(async (flow: SendPulseFlow) => {
-        if (!selectedChatId) return;
-        const chat = allChatsRef.current.find(c => c.id === selectedChatId);
-        if (!chat) return;
-
-        toast({
-            title: "Invio Flow (Simulato)",
-            description: `Invio del flow "${flow.name}"...`,
-        });
-
-        console.log(`Sending flow ${flow.id} to contact ${chat.contactId}`);
-    }, [selectedChatId, toast]);
-
     const handleContactAdded = useCallback(async () => {
         await handleManualRefresh();
     }, [handleManualRefresh]);
@@ -1131,7 +1115,6 @@ export default function ChatLayout() {
                     isLoadingMessages={isLoadingMessages}
                     handleSendMessage={handleSendMessage}
                     handleSendTemplate={handleSendTemplate}
-                    handleSendFlow={handleSendFlow}
                     handleSendQuickReply={handleSendQuickReply}
                     handleCloseChat={handleCloseChat}
                     isClosingChat={isClosingChat}

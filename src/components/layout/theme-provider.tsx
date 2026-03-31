@@ -10,7 +10,6 @@ export const DEFAULT_THEME: ThemeSettings = {
     accentColor: APP_DEFAULTS.theme.accentColor,
     secondaryColor: APP_DEFAULTS.theme.accentColor,
     headerName: 'Chat Manager',
-    logoUrl: "",
     logoEmoji: APP_DEFAULTS.theme.logoEmoji,
 };
 
@@ -42,7 +41,6 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
                 accentColor: activeBot.secondaryColor || DEFAULT_THEME.accentColor,
                 secondaryColor: activeBot.secondaryColor || DEFAULT_THEME.secondaryColor,
                 headerName: activeBot.headerTitle || activeBot.name || DEFAULT_THEME.headerName,
-                logoUrl: activeBot.logoUrl || DEFAULT_THEME.logoUrl,
                 logoEmoji: activeBot.logoEmoji || DEFAULT_THEME.logoEmoji,
             });
         } else {
