@@ -550,7 +550,7 @@ export default function ChatLayout() {
                 .map(([botId, url]) => {
                     const bot = bots.find(b => b.id === botId);
                     if (bot && url) {
-                        return fetchNextChatPage(url, bot);
+                        return fetchNextChatPage(url, bot.botId, bot.name);
                     }
                     return Promise.resolve(null);
                 });
@@ -831,11 +831,21 @@ export default function ChatLayout() {
             }
 
             if (file) {
-                // For file messages: remove the optimistic message and let the
-                // real message arrive via refresh, avoiding duplicates
-                setActiveChatMessages(prev => prev.filter(m => m.id !== tempMessageId));
-                // Trigger a refresh to get the real message from the API
-                refreshActiveChatMessages(selectedChatId);
+                // Mark optimistic message as sent
+                setActiveChatMessages(prev => prev.map(m =>
+                    m.id === tempMessageId ? { ...m, status: 2 } : m
+                ));
+                // Wait a moment for SendPulse to process, then refresh
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                await refreshActiveChatMessages(selectedChatId);
+                // Remove temp only — the real message from API is now in the list
+                setActiveChatMessages(prev => {
+                    const hasRealMessages = prev.some(m => !m.id.startsWith('temp-'));
+                    if (hasRealMessages) {
+                        return prev.filter(m => m.id !== tempMessageId);
+                    }
+                    return prev; // Keep temp if no real messages arrived yet
+                });
             } else {
                 // For text messages: just mark as sent
                 setActiveChatMessages(prev => prev.map(m =>
@@ -992,8 +1002,8 @@ export default function ChatLayout() {
                 if (operatorId && operator) {
                     draft.details.operator = {
                         user_id: Number(operator.operatorId),
-                        username: operator.name,
-                        email: operator.email,
+                        username: operator.name || '',
+                        email: operator.email || '',
                         avatar: null,
                         created_at: ''
                     };
@@ -1024,7 +1034,8 @@ export default function ChatLayout() {
             const response = await addContactNote(chat.botId, chat.contactId, noteText);
             if (response.success && response.data) {
                 toast({ title: 'Nota aggiunta', description: 'La nota è stata salvata con successo.' });
-                setActiveChatMessages(prev => [...prev, response.data]);
+                const noteMessage = response.data;
+                setActiveChatMessages(prev => [...prev, noteMessage]);
             } else {
                 throw new Error(response.error || 'Impossibile aggiungere la nota.');
             }
@@ -1113,7 +1124,7 @@ export default function ChatLayout() {
                     filters={filters}
                     setFilters={setFilters}
                     operators={operators}
-                    currentUser={currentUser}
+                    currentUser={currentUser as UserProfile | null}
                     handleLoadMore={handleLoadMore}
                     isLoadingMore={isLoadingMore}
                     handleManualRefresh={handleManualRefresh}
