@@ -53,7 +53,7 @@ const MessageInput = React.forwardRef<HTMLTextAreaElement, MessageInputProps>(({
   const auth = useAuth();
   const { toast } = useToast();
 
-  const quickRepliesCollection = useMemoFirebase(() => firestore ? collection(firestore, 'quick_replies') : null, [firestore]);
+  const quickRepliesCollection = useMemoFirebase(() => firestore ? collection(firestore, 'quickReplies') : null, [firestore]);
   const { data: allQuickReplies, isLoading: isLoadingQuickReplies } = useCollection<QuickReply>(quickRepliesCollection);
 
   // Template handling state
@@ -179,7 +179,7 @@ const MessageInput = React.forwardRef<HTMLTextAreaElement, MessageInputProps>(({
     };
 
     if (replyData.id) {
-      const docRef = doc(firestore, "quick_replies", replyData.id);
+      const docRef = doc(firestore, "quickReplies", replyData.id);
       const { createdAt, ...updateData } = dataToSave;
       await updateDoc(docRef, updateData);
     } else {
@@ -189,7 +189,7 @@ const MessageInput = React.forwardRef<HTMLTextAreaElement, MessageInputProps>(({
 
   const handleDeleteQuickReply = async (id: string) => {
     if (!firestore) throw new Error("Firestore not initialized.");
-    const docRef = doc(firestore, "quick_replies", id);
+    const docRef = doc(firestore, "quickReplies", id);
     await deleteDoc(docRef);
   };
 

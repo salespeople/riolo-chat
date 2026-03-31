@@ -33,7 +33,7 @@ service cloud.firestore {
       allow delete: if isSuperadmin();
     }
 
-    match /quick_replies/{id} {
+    match /quickReplies/{id} {
       allow read, write: if isSignedIn();
     }
 
@@ -44,14 +44,13 @@ service cloud.firestore {
 
     match /realtime_updates/{id} {
       allow read: if isSignedIn();
-      allow write: if false; // Server only
+      allow write: if false; // Legacy — kept for compatibility
     }
 
-    // Realtime events: readable by authenticated users, deletable after processing
-    match /realtimeEvents/{id} {
+    // globalTrigger: the webhook receiver writes here, clients read via onSnapshot
+    match /globalTrigger/{id} {
       allow read: if isSignedIn();
-      allow delete: if isSignedIn(); // Clients clean up after processing
-      allow create, update: if false; // Server only
+      allow write: if false; // Server only (firebase-admin bypasses rules)
     }
 
     match /webhook_logs/{id} {

@@ -9,7 +9,7 @@ export function uploadFile(
   app: FirebaseApp,
   auth: Auth,
   file: File,
-  basePath: 'uploads' | 'quick_replies',
+  basePath: 'uploads' | 'quickReplies',
   onProgress?: (progress: number) => void
 ): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -19,10 +19,10 @@ export function uploadFile(
       console.error(error.message);
       return reject(error);
     }
-    
+
     let filePath: string;
-    
-    if (basePath === 'quick_replies') {
+
+    if (basePath === 'quickReplies') {
       // Logic for shared quick replies folder, as requested.
       filePath = `${basePath}/${file.name}`;
     } else {
@@ -30,7 +30,7 @@ export function uploadFile(
       const userId = user.uid;
       filePath = `${basePath}/${userId}/${Date.now()}-${file.name}`;
     }
-    
+
     const storage = getStorage(app);
     const storageRef = ref(storage, filePath);
     const uploadTask = uploadBytesResumable(storageRef, file);

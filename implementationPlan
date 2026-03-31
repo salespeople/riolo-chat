@@ -394,7 +394,7 @@ service cloud.firestore {
     }
 
     // Quick replies, prescriptions, ecc. — invariati
-    match /quick_replies/{id} {
+    match /quickReplies/{id} {
       allow read, write: if isSignedIn();
     }
     

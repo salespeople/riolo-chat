@@ -11,7 +11,7 @@ service firebase.storage {
 
     // Shared rule for quick reply attachments.
     // Any authenticated user can read and write to this folder.
-    match /quick_replies/{fileName} {
+    match /quickReplies/{fileName} {
       allow read, write: if request.auth != null;
     }
   }

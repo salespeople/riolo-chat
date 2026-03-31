@@ -12,7 +12,7 @@ import { produce } from "immer";
 import { uploadFile } from "@/lib/storage";
 import { getChatsForBot, sendMessage, sendTemplateMessage, closeChat, openChat, getWhatsappBotVariables, getWhatsappTags, assignContactToOperator, fetchNextChatPage, getMessagesForChat, loadOlderMessages, markChatAsRead, addContactNote, deleteContactNote, updateContactNote } from "@/lib/sendpulse";
 import { useFirebaseApp, useAuth, useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
-import { collection, doc, onSnapshot, query, where, orderBy, deleteDoc, limit } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import type { UserProfile } from "@/firebase/auth/use-user";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -465,96 +465,75 @@ export default function ChatLayout() {
 
         if (!firestore) return;
 
-        // Listen on realtimeEvents collection for targeted updates.
-        // Each webhook writes a new document here with contactId, botId, lastMessage, etc.
-        // Instead of re-fetching ALL chats, we update only the affected chat.
-        const eventsQuery = query(
-            collection(firestore, 'realtimeEvents'),
-            where('processed', '==', false),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-        );
+        // Listen on a SINGLE document: globalTrigger/latest
+        // The webhook receiver writes event data + an atomic counter here.
+        // We apply targeted updates based on eventTitle and contactId.
+        const triggerDocRef = doc(firestore, 'globalTrigger', 'latest');
+        let isFirstSnapshot = true;
 
-        const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
-            if (snapshot.empty) return;
+        const unsubscribe = onSnapshot(triggerDocRef, (docSnap) => {
+            // Skip the initial snapshot (it's the current state, not a new event)
+            if (isFirstSnapshot) {
+                isFirstSnapshot = false;
+                return;
+            }
+            if (docSnap.metadata.fromCache) return;
 
-            snapshot.docChanges().forEach(async (change) => {
-                if (change.type !== 'added') return;
+            const data = docSnap.data();
+            if (!data) return;
 
-                const eventDoc = change.doc;
-                const eventData = eventDoc.data();
-                const { botId: eventBotId, contactId: eventContactId, eventTitle, lastMessage, contactName } = eventData;
+            const { botId: eventBotId, contactId: eventContactId, eventTitle, lastMessage } = data;
 
-                // Skip events for bots the user is not viewing
-                if (activeBotId && eventBotId && activeBotId !== eventBotId) {
-                    // Still clean up the event
-                    try { await deleteDoc(eventDoc.ref); } catch { }
-                    return;
-                }
+            console.log(`📨 Trigger: [${eventTitle}] bot=${eventBotId} contact=${eventContactId}`);
 
-                // Check if this event's bot is in the user's allowed bots
-                const isAllowedBot = userBots.some(b => b.botId === eventBotId);
-                if (!isAllowedBot) {
-                    try { await deleteDoc(eventDoc.ref); } catch { }
-                    return;
-                }
+            // Skip events for bots the user is not viewing
+            if (activeBotId && eventBotId && activeBotId !== eventBotId) return;
 
-                console.log(`📨 Evento real-time: [${eventTitle}] bot=${eventBotId} contact=${eventContactId}`);
+            // Skip events for bots not in the user's allowed list
+            const isAllowedBot = !eventBotId || userBots.some(b => b.botId === eventBotId);
+            if (!isAllowedBot) return;
 
-                const isMessageEvent = eventTitle === 'incoming_message' || eventTitle === 'outgoing_message';
-                const isChatStatusEvent = eventTitle === 'open_chat';
+            const isMessageEvent = eventTitle === 'incoming_message' || eventTitle === 'outgoing_message';
+            const isChatStatusEvent = eventTitle === 'open_chat';
 
-                if (isMessageEvent && eventContactId) {
-                    // Targeted update: update only the affected chat in the list
-                    setAllChats(prevChats => produce(prevChats, draft => {
-                        const existingChat = draft.find(c => c.contactId === eventContactId);
-                        if (existingChat) {
-                            // Update snippet and timestamp
-                            if (lastMessage) {
-                                existingChat.lastMessageSnippet = lastMessage;
-                            }
-                            existingChat.lastMessageTimestamp = new Date().toISOString();
-                            existingChat.lastActivityAt = new Date().toISOString();
-
-                            // Increment unread only for incoming messages and only if this chat is NOT currently open
-                            if (eventTitle === 'incoming_message') {
-                                existingChat.isChatOpened = true;
-                                if (existingChat.id !== selectedChatIdRef.current) {
-                                    existingChat.unreadCount = (existingChat.unreadCount || 0) + 1;
-                                }
-                            }
+            if (isMessageEvent && eventContactId) {
+                // TARGETED update: modify only the affected chat in state
+                setAllChats(prevChats => produce(prevChats, draft => {
+                    const existingChat = draft.find(c => c.contactId === eventContactId);
+                    if (existingChat) {
+                        if (lastMessage) {
+                            existingChat.lastMessageSnippet = lastMessage;
                         }
-                        // If chat doesn't exist in list yet, we'll pick it up on next full refresh
-                        // or the user can manually refresh
-                    }));
+                        existingChat.lastMessageTimestamp = new Date().toISOString();
+                        existingChat.lastActivityAt = new Date().toISOString();
 
-                    // If this contact's chat is currently open, fetch the new messages
-                    if (selectedChatIdRef.current === eventContactId) {
-                        refreshActiveChatMessages(eventContactId);
-                    }
-                } else if (isChatStatusEvent && eventContactId) {
-                    // open_chat event: mark the chat as opened
-                    setAllChats(prevChats => produce(prevChats, draft => {
-                        const existingChat = draft.find(c => c.contactId === eventContactId);
-                        if (existingChat) {
+                        // Increment unread only for incoming + not the currently viewed chat
+                        if (eventTitle === 'incoming_message') {
                             existingChat.isChatOpened = true;
+                            if (existingChat.id !== selectedChatIdRef.current) {
+                                existingChat.unreadCount = (existingChat.unreadCount || 0) + 1;
+                            }
                         }
-                    }));
-                } else if (eventTitle === 'new_subscriber' && eventContactId) {
-                    // New subscriber: trigger a refresh for this bot to pick up the new contact
-                    refreshChatList(false, eventBotId);
-                } else {
-                    // For other events (unsubscribe, bot_block, etc.) do a targeted refresh
-                    refreshChatList(false, eventBotId);
-                }
+                    }
+                    // Chat not in list yet? Will appear on next manual refresh or new_subscriber event
+                }));
 
-                // Clean up: delete the processed event document
-                try {
-                    await deleteDoc(eventDoc.ref);
-                } catch (err) {
-                    console.warn('Failed to clean up realtime event:', err);
+                // If this chat is currently open, refresh its messages
+                if (selectedChatIdRef.current === eventContactId) {
+                    refreshActiveChatMessages(eventContactId);
                 }
-            });
+            } else if (isChatStatusEvent && eventContactId) {
+                setAllChats(prevChats => produce(prevChats, draft => {
+                    const existingChat = draft.find(c => c.contactId === eventContactId);
+                    if (existingChat) {
+                        existingChat.isChatOpened = true;
+                    }
+                }));
+            } else if (eventTitle === 'new_subscriber') {
+                // New contact: need a full refresh for this bot
+                refreshChatList(false, eventBotId);
+            }
+            // Other events (unsubscribe, bot_block) are informational — no UI action needed
         });
 
         return () => unsubscribe();
