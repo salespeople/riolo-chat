@@ -1,7 +1,7 @@
 
 export const firebaseConfig = {
   apiKey: "AIzaSyB8k9QoFz-ShkFpcLndkQMdcAzr_vtPpSk",
-  authDomain: "riolo-chat--riolo-chat.europe-west4.hosted.app",
+  authDomain: "riolo-chat.firebaseapp.com",
   projectId: "riolo-chat",
   storageBucket: "riolo-chat.firebasestorage.app",
   messagingSenderId: "362141060678",

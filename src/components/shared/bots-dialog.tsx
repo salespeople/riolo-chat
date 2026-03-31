@@ -37,7 +37,8 @@ const BotForm = ({ bot, onSave, onCancel, isSaving }: {
     const [name, setName] = useState(bot?.name || '');
     const [botId, setBotId] = useState(bot?.botId || '');
     const [phone, setPhone] = useState(bot?.phone || '');
-    const [headerColor, setHeaderColor] = useState(bot?.headerColor || '#007bc3');
+    const [primaryColor, setPrimaryColor] = useState(bot?.primaryColor || bot?.headerColor || '#007bc3');
+    const [secondaryColor, setSecondaryColor] = useState(bot?.secondaryColor || '#a4d4f5');
     const [headerTitle, setHeaderTitle] = useState(bot?.headerTitle || '');
     const [logoEmoji, setLogoEmoji] = useState(bot?.logoEmoji || '');
     const [logoUrl, setLogoUrl] = useState(bot?.logoUrl || '');
@@ -45,7 +46,7 @@ const BotForm = ({ bot, onSave, onCancel, isSaving }: {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !botId) return;
-        onSave({ name, botId, phone, headerColor, headerTitle, logoUrl, logoEmoji });
+        onSave({ name, botId, phone, primaryColor, secondaryColor, headerColor: primaryColor, headerTitle, logoUrl, logoEmoji });
     };
 
     return (
@@ -68,10 +69,17 @@ const BotForm = ({ bot, onSave, onCancel, isSaving }: {
                     <Input id="bot-headerTitle" value={headerTitle} onChange={(e) => setHeaderTitle(e.target.value)} placeholder="Es. Riolo Volvo Chat" disabled={isSaving} />
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="bot-headerColor">Colore Header</Label>
+                    <Label htmlFor="bot-primaryColor">Colore Primario (Header)</Label>
                     <div className="flex gap-2">
-                        <input type="color" value={headerColor} onChange={(e) => setHeaderColor(e.target.value)} className="w-10 h-10 rounded border p-1 cursor-pointer" disabled={isSaving} />
-                        <Input value={headerColor} onChange={(e) => setHeaderColor(e.target.value)} placeholder="#007bc3" disabled={isSaving} />
+                        <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-10 h-10 rounded border p-1 cursor-pointer" disabled={isSaving} />
+                        <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} placeholder="#007bc3" disabled={isSaving} />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="bot-secondaryColor">Colore Secondario (Accenti)</Label>
+                    <div className="flex gap-2">
+                        <input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} className="w-10 h-10 rounded border p-1 cursor-pointer" disabled={isSaving} />
+                        <Input value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} placeholder="#a4d4f5" disabled={isSaving} />
                     </div>
                 </div>
                 <div className="space-y-2">
@@ -150,7 +158,7 @@ export default function BotsDialog({ isOpen, onClose }: BotsDialogProps) {
                                             <TableHead>Nome</TableHead>
                                             <TableHead>Numero</TableHead>
                                             <TableHead>Bot ID</TableHead>
-                                            <TableHead>Colore</TableHead>
+                                            <TableHead>Colori</TableHead>
                                             <TableHead className="text-right">Azioni</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -167,12 +175,18 @@ export default function BotsDialog({ isOpen, onClose }: BotsDialogProps) {
                                                     <TableCell>{bot.phone || '—'}</TableCell>
                                                     <TableCell className="font-mono text-xs">{bot.botId}</TableCell>
                                                     <TableCell>
-                                                        {bot.headerColor && (
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-5 h-5 rounded border" style={{ backgroundColor: bot.headerColor }} />
-                                                                <span className="text-xs font-mono">{bot.headerColor}</span>
-                                                            </div>
-                                                        )}
+                                                        <div className="flex items-center gap-3">
+                                                            {(bot.primaryColor || bot.headerColor) && (
+                                                                <div className="flex items-center gap-1" title="Primario">
+                                                                    <div className="w-5 h-5 rounded border" style={{ backgroundColor: bot.primaryColor || bot.headerColor }} />
+                                                                </div>
+                                                            )}
+                                                            {bot.secondaryColor && (
+                                                                <div className="flex items-center gap-1" title="Secondario">
+                                                                    <div className="w-5 h-5 rounded border" style={{ backgroundColor: bot.secondaryColor }} />
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         <Button variant="ghost" size="icon" onClick={() => { setEditingBot(bot); setIsFormOpen(true); }}>

@@ -77,7 +77,10 @@ export function ThemeUpdater() {
       root.style.setProperty('--primary-foreground', getContrastHsl(theme.primaryColor));
       root.style.setProperty('--brand-foreground', getContrastHsl(theme.primaryColor));
     }
-    if (theme.accentColor) {
+    if (theme.secondaryColor) {
+      root.style.setProperty('--accent', hexToHsl(theme.secondaryColor));
+      root.style.setProperty('--accent-foreground', getContrastHsl(theme.secondaryColor));
+    } else if (theme.accentColor) {
       root.style.setProperty('--accent', hexToHsl(theme.accentColor));
       root.style.setProperty('--accent-foreground', getContrastHsl(theme.accentColor));
     }

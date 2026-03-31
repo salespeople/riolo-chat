@@ -13,7 +13,9 @@ export interface Bot {
   name: string;
   botId: string;
   phone: string;
-  headerColor?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  headerColor?: string; // @deprecated - use primaryColor
   headerTitle?: string;
   logoUrl?: string;
   logoEmoji?: string;
@@ -275,6 +277,7 @@ export interface SendPulseTag {
 export interface ThemeSettings {
   primaryColor: string;
   accentColor: string;
+  secondaryColor: string;
   headerName: string;
   logoUrl: string;
   logoEmoji: string;

@@ -5,7 +5,7 @@
 ### Cosa funziona bene e va mantenuto
 - **Token cache in-memory** (`accessTokenCache` in `sendpulse.ts`) — già ottimizzata
 - **`app.config.ts`** con lookup O(1) via `Map` — zero letture DB per configurazione bot
-- **Realtime trigger** via Firestore `onSnapshot` su `realtime_updates/global_trigger` — pattern efficiente
+- **Realtime trigger** via Firestore `onSnapshot` su `realtime_updates/globalTrigger` — pattern efficiente
 - **Ruoli `admin`/`operator`** con `instanceId[]` sul profilo utente — base solida per il multi-tenant
 - **Collection `bots`** già presente in Firestore e già letta con `useCollection`
 
@@ -98,7 +98,7 @@ users/{uid}
 ### Trigger realtime (evoluzione)
 
 ```
-realtime_updates/global_trigger
+realtime_updates/globalTrigger
 ├── lastUpdate: Timestamp
 └── botId: "68cbe42e..."    // NUOVO: quale bot ha ricevuto il messaggio
 ```
@@ -117,7 +117,7 @@ Aggiungere `botId` al trigger permette al client di aggiornare SOLO le chat del 
 | Lista utenti | `useCollection('users')` | Invariato | 1 (onSnapshot) |
 | Lista bot | `useCollection('bots')` | Invariato, stessi path | 1 (onSnapshot) |
 | Tema | `useDoc('settings/theme')` | Invariato | 1 (onSnapshot) |
-| Trigger | `onSnapshot('realtime_updates/global_trigger')` | + campo `botId` | 0 extra |
+| Trigger | `onSnapshot('realtime_updates/globalTrigger')` | + campo `botId` | 0 extra |
 
 **Totale: 0 letture aggiuntive rispetto al progetto attuale.**
 
@@ -497,7 +497,7 @@ service cloud.firestore {
 │                        │    .botId[]           │                │
 │                        │                        │                │
 │                        │  realtime_updates/     │                │
-│                        │    global_trigger      │                │
+│                        │    globalTrigger      │                │
 │                        │    .botId (NUOVO)      │                │
 └─────────────────────────────────────────────────────────────────┘
 

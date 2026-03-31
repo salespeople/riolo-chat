@@ -99,11 +99,12 @@ export default function UsersListDialog({ isOpen, onClose }: UsersListDialogProp
   const filteredOperators = useMemo(() => {
     if (!users) return [];
 
-    return users.filter(user =>
-      user.role === 'operator' &&
-      user.botId &&
-      (activeBotId ? user.botId === activeBotId : !!user.botId)
-    );
+    return users.filter(user => {
+      if (user.role !== 'operator' || !user.botId) return false;
+      if (!activeBotId) return true;
+      const userBotIds = Array.isArray(user.botId) ? user.botId : [user.botId];
+      return userBotIds.includes(activeBotId);
+    });
   }, [users, activeBotId]);
 
 

@@ -28,7 +28,11 @@ export async function addUser(userData: UserInput) {
             await authAdmin.setCustomUserClaims(createdUserUid, { admin: true });
         }
 
-        const finalBotId = userData.role === 'superadmin' ? '' : (userData.botId || '');
+        const finalBotId = userData.role === 'superadmin' ? [] : (
+            Array.isArray(userData.botId)
+                ? userData.botId.filter(Boolean)
+                : userData.botId ? [userData.botId] : []
+        );
 
         const userRef = db.collection("users").doc(createdUserUid);
         await userRef.set({
@@ -78,7 +82,11 @@ export async function updateUser(userData: UserEditInput) {
         // 2. Set custom claims based on the new role
         await authAdmin.setCustomUserClaims(userData.uid, { admin: userData.role === 'admin' || userData.role === 'superadmin' });
 
-        const finalBotId = userData.role === 'superadmin' ? '' : (userData.botId || '');
+        const finalBotId = userData.role === 'superadmin' ? [] : (
+            Array.isArray(userData.botId)
+                ? userData.botId.filter(Boolean)
+                : userData.botId ? [userData.botId] : []
+        );
 
 
         // 3. Update Firestore document

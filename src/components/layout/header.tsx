@@ -96,6 +96,16 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
   };
 
   const canViewSettings = user?.role === 'admin';
+  const canSwitchBot = user?.role === 'superadmin' || (user?.role === 'admin' && bots.length > 1);
+
+  // Find the active bot to display its name and phone
+  const activeBot = activeBotId
+    ? bots.find(b => b.botId === activeBotId)
+    : bots[0];
+
+  const botDisplayLabel = activeBot
+    ? `${activeBot.name}${activeBot.phone ? ` (${activeBot.phone})` : ''}`
+    : '';
 
   return (
     <>
@@ -180,18 +190,18 @@ export default function Header({ onContactAdded, bots }: HeaderProps) {
             ) : (
                 <div className="flex items-center gap-3">
                     <h1 className="text-xl font-semibold hidden md:block">
-                        {theme.headerName}
+                        {botDisplayLabel || theme.headerName}
                     </h1>
-                    {bots.length > 0 && (
+                    {canSwitchBot && bots.length > 0 && (
                         <Select value={activeBotId || "all"} onValueChange={(val) => setActiveBotId(val === "all" ? null : val)}>
-                            <SelectTrigger className="w-[180px] h-8 bg-brand-foreground/10 border-none">
-                                <SelectValue placeholder="Tutti i Bot" />
+                            <SelectTrigger className="w-[220px] h-8 bg-brand-foreground/10 border-none">
+                                <SelectValue placeholder="Seleziona Bot" />
                             </SelectTrigger>
                             <SelectContent>
                                 {bots.length > 1 && <SelectItem value="all">Tutti i Bot</SelectItem>}
                                 {bots.map(bot => (
                                     <SelectItem key={bot.id} value={bot.botId}>
-                                        {bot.logoEmoji || '🤖'} {bot.name}
+                                        {bot.logoEmoji || '🤖'} {bot.name}{bot.phone ? ` (${bot.phone})` : ''}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

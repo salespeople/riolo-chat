@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     const db = getDb();
 
     // The single responsibility: update the global trigger document
-    const triggerRef = db.collection('realtime_updates').doc('global_trigger');
+    const triggerRef = db.collection('realtime_updates').doc('globalTrigger');
     await triggerRef.set({ lastUpdate: Timestamp.now() });
 
     console.log("✅ Chat list refresh triggered successfully via API.");
@@ -21,14 +21,14 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error("❌ CRITICAL ERROR IN /api/refresh-chats:", {
-        message: error.message,
-        stack: error.stack,
+      message: error.message,
+      stack: error.stack,
     });
-    
+
     // Return a server error response
     return NextResponse.json(
-        { status: "error", message: "Internal Server Error" },
-        { status: 500 }
+      { status: "error", message: "Internal Server Error" },
+      { status: 500 }
     );
   }
 }

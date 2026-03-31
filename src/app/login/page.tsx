@@ -54,7 +54,11 @@ export default function LoginPage() {
 
       // REGOLA DI ACCESSO
       const isAdmin = userProfile.role === 'admin';
-      const hasAccess = userProfile.role === "superadmin" || !!userProfile.botId;
+      const hasAccess = userProfile.role === "superadmin" || (
+        Array.isArray(userProfile.botId)
+          ? userProfile.botId.length > 0
+          : !!userProfile.botId
+      );
 
       if (isAdmin || hasAccess) {
         // Accesso consentito

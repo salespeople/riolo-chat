@@ -12,7 +12,7 @@ import { produce } from "immer";
 import { uploadFile } from "@/lib/storage";
 import { getChatsForBot, sendMessage, sendTemplateMessage, closeChat, openChat, getWhatsappBotVariables, getWhatsappTags, assignContactToOperator, fetchNextChatPage, getMessagesForChat, loadOlderMessages, markChatAsRead, addContactNote, deleteContactNote, updateContactNote } from "@/lib/sendpulse";
 import { useFirebaseApp, useAuth, useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
-import { collection, doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, orderBy, deleteDoc, limit } from "firebase/firestore";
 import type { UserProfile } from "@/firebase/auth/use-user";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -313,15 +313,22 @@ export default function ChatLayout() {
         }
     }, [botsData, setBots]);
 
+    // Auto-select the active bot when user has only one bot available
+    useEffect(() => {
+        if (userBots.length === 1 && !activeBotId) {
+            setActiveBotId(userBots[0].botId);
+        }
+    }, [userBots, activeBotId, setActiveBotId]);
+
 
     const operators = useMemo(() => {
         if (!allUsers || !activeBotId) return [];
-        return allUsers.filter(user =>
-            user.role === 'operator' &&
-            user.operatorId &&
-            user.botId &&
-            (activeBotId ? user.botId === activeBotId : true)
-        );
+        return allUsers.filter(user => {
+            if (user.role !== 'operator' || !user.operatorId || !user.botId) return false;
+            if (!activeBotId) return true;
+            const userBotIds = Array.isArray(user.botId) ? user.botId : [user.botId];
+            return userBotIds.includes(activeBotId);
+        });
     }, [allUsers, activeBotId]);
 
 
@@ -458,37 +465,100 @@ export default function ChatLayout() {
 
         if (!firestore) return;
 
-        const triggerDocRef = doc(firestore, 'realtime_updates', 'global_trigger');
-        let isFirstSnapshot = true;
+        // Listen on realtimeEvents collection for targeted updates.
+        // Each webhook writes a new document here with contactId, botId, lastMessage, etc.
+        // Instead of re-fetching ALL chats, we update only the affected chat.
+        const eventsQuery = query(
+            collection(firestore, 'realtimeEvents'),
+            where('processed', '==', false),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
 
-        const unsubscribe = onSnapshot(triggerDocRef, (docSnap) => {
-            if (isFirstSnapshot) {
-                isFirstSnapshot = false;
-                return;
-            }
-            if (docSnap.metadata.fromCache) return;
+        const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
+            if (snapshot.empty) return;
 
-            const data = docSnap.data();
-            const triggerBotId = data?.botId;
+            snapshot.docChanges().forEach(async (change) => {
+                if (change.type !== 'added') return;
 
-            console.log("Trigger in tempo reale ricevuto, avvio aggiornamento per bot", triggerBotId || "TUTTI");
+                const eventDoc = change.doc;
+                const eventData = eventDoc.data();
+                const { botId: eventBotId, contactId: eventContactId, eventTitle, lastMessage, contactName } = eventData;
 
-            // Aggiorna solo se riguarda il bot corrente (o se si visualizzano tutti)
-            // if we have an activeBotId and the trigger is for another bot, ignore it!
-            if (activeBotId && triggerBotId && activeBotId !== triggerBotId) {
-                return;
-            }
+                // Skip events for bots the user is not viewing
+                if (activeBotId && eventBotId && activeBotId !== eventBotId) {
+                    // Still clean up the event
+                    try { await deleteDoc(eventDoc.ref); } catch { }
+                    return;
+                }
 
-            refreshChatList(false, triggerBotId);
+                // Check if this event's bot is in the user's allowed bots
+                const isAllowedBot = userBots.some(b => b.botId === eventBotId);
+                if (!isAllowedBot) {
+                    try { await deleteDoc(eventDoc.ref); } catch { }
+                    return;
+                }
 
-            if (selectedChatIdRef.current) {
-                refreshActiveChatMessages(selectedChatIdRef.current);
-            }
+                console.log(`📨 Evento real-time: [${eventTitle}] bot=${eventBotId} contact=${eventContactId}`);
+
+                const isMessageEvent = eventTitle === 'incoming_message' || eventTitle === 'outgoing_message';
+                const isChatStatusEvent = eventTitle === 'open_chat';
+
+                if (isMessageEvent && eventContactId) {
+                    // Targeted update: update only the affected chat in the list
+                    setAllChats(prevChats => produce(prevChats, draft => {
+                        const existingChat = draft.find(c => c.contactId === eventContactId);
+                        if (existingChat) {
+                            // Update snippet and timestamp
+                            if (lastMessage) {
+                                existingChat.lastMessageSnippet = lastMessage;
+                            }
+                            existingChat.lastMessageTimestamp = new Date().toISOString();
+                            existingChat.lastActivityAt = new Date().toISOString();
+
+                            // Increment unread only for incoming messages and only if this chat is NOT currently open
+                            if (eventTitle === 'incoming_message') {
+                                existingChat.isChatOpened = true;
+                                if (existingChat.id !== selectedChatIdRef.current) {
+                                    existingChat.unreadCount = (existingChat.unreadCount || 0) + 1;
+                                }
+                            }
+                        }
+                        // If chat doesn't exist in list yet, we'll pick it up on next full refresh
+                        // or the user can manually refresh
+                    }));
+
+                    // If this contact's chat is currently open, fetch the new messages
+                    if (selectedChatIdRef.current === eventContactId) {
+                        refreshActiveChatMessages(eventContactId);
+                    }
+                } else if (isChatStatusEvent && eventContactId) {
+                    // open_chat event: mark the chat as opened
+                    setAllChats(prevChats => produce(prevChats, draft => {
+                        const existingChat = draft.find(c => c.contactId === eventContactId);
+                        if (existingChat) {
+                            existingChat.isChatOpened = true;
+                        }
+                    }));
+                } else if (eventTitle === 'new_subscriber' && eventContactId) {
+                    // New subscriber: trigger a refresh for this bot to pick up the new contact
+                    refreshChatList(false, eventBotId);
+                } else {
+                    // For other events (unsubscribe, bot_block, etc.) do a targeted refresh
+                    refreshChatList(false, eventBotId);
+                }
+
+                // Clean up: delete the processed event document
+                try {
+                    await deleteDoc(eventDoc.ref);
+                } catch (err) {
+                    console.warn('Failed to clean up realtime event:', err);
+                }
+            });
         });
 
-        // Pulisci il listener quando il componente viene smontato
         return () => unsubscribe();
-    }, [firestore, refreshChatList, refreshActiveChatMessages]);
+    }, [firestore, refreshChatList, refreshActiveChatMessages, activeBotId, userBots]);
 
 
     const handleManualRefresh = useCallback(async () => {

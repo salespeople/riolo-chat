@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useBotStore } from '@/stores/bot-store';
 
 interface AddUserFormProps {
   onSuccess?: () => void;
@@ -28,8 +30,9 @@ const roles: UserRole[] = ["admin", "operator"];
 export default function AddUserForm({ onSuccess }: AddUserFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { bots: allBots } = useBotStore();
 
-  const [formData, setFormData] = useState<Omit<UserInput, 'botId'>>({
+  const [formData, setFormData] = useState<Omit<UserInput, 'botId'> & { botIds: string[] }>({
     email: "",
     name: "",
     password: "",
@@ -37,6 +40,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
     role: "operator",
     operatorId: "",
     color: "#0ea54f",
+    botIds: [],
   });
 
   const [errors, setErrors] = useState<z.ZodError<UserInput> | null>(null);
@@ -44,6 +48,15 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleBotToggle = (botId: string, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      botIds: checked
+        ? [...prev.botIds, botId]
+        : prev.botIds.filter(id => id !== botId),
+    }));
   };
 
   const handleSelectChange = (name: keyof Omit<UserInput, 'botId'>) => (value: string) => {
@@ -57,7 +70,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
 
     const dataToValidate: UserInput = {
       ...formData,
-      botId: '',
+      botId: formData.botIds,
     };
 
     const validation = userInputSchema.safeParse(dataToValidate);
@@ -74,7 +87,7 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
       if (result.success) {
         toast({ title: "Successo!", description: result.message });
         setFormData({
-          email: "", name: "", password: "", confirmPassword: "", role: "operator", operatorId: "", color: "#0ea54f",
+          email: "", name: "", password: "", confirmPassword: "", role: "operator", operatorId: "", color: "#0ea54f", botIds: [],
         });
         onSuccess?.();
       } else {
@@ -136,6 +149,29 @@ export default function AddUserForm({ onSuccess }: AddUserFormProps) {
         <Label htmlFor="operatorId">Operator ID (SendPulse)</Label>
         <Input id="operatorId" name="operatorId" placeholder="ID operatore da SendPulse" value={formData.operatorId || ''} onChange={handleChange} disabled={isSubmitting} />
         {getErrorForField("operatorId") && <p className="text-sm font-medium text-destructive">{getErrorForField("operatorId")}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Bot Assegnati</Label>
+        <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+          {allBots.length > 0 ? allBots.map(bot => (
+            <div key={bot.id} className="flex items-center space-x-2">
+              <Checkbox
+                id={`add-bot-${bot.botId}`}
+                checked={formData.botIds.includes(bot.botId)}
+                onCheckedChange={(checked) => handleBotToggle(bot.botId, !!checked)}
+                disabled={isSubmitting}
+              />
+              <label htmlFor={`add-bot-${bot.botId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                {bot.logoEmoji && <span className="mr-1">{bot.logoEmoji}</span>}
+                {bot.name}{bot.phone ? ` (${bot.phone})` : ''}
+              </label>
+            </div>
+          )) : (
+            <p className="text-sm text-muted-foreground">Nessun bot disponibile. Configura prima i bot.</p>
+          )}
+        </div>
+        {getErrorForField("botId") && <p className="text-sm font-medium text-destructive">{getErrorForField("botId")}</p>}
       </div>
 
       <div className="space-y-2">

@@ -85,7 +85,7 @@ const ChatHeader = React.memo(({
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size={assignedOperatorUser ? 'icon' : 'sm'} disabled={isLoadingOperators} className={assignedOperatorUser ? "h-9 w-9 rounded-full" : ""}>
+            <Button variant="outline" size={assignedOperatorUser ? 'icon' : 'sm'} disabled={isLoadingOperators} className={assignedOperatorUser ? "h-9 w-9 rounded-full" : "bg-accent text-accent-foreground border-accent"}>
               {isLoadingOperators ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : assignedOperatorUser ? (

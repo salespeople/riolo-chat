@@ -47,6 +47,13 @@ service cloud.firestore {
       allow write: if false; // Server only
     }
 
+    // Realtime events: readable by authenticated users, deletable after processing
+    match /realtimeEvents/{id} {
+      allow read: if isSignedIn();
+      allow delete: if isSignedIn(); // Clients clean up after processing
+      allow create, update: if false; // Server only
+    }
+
     match /webhook_logs/{id} {
       allow read, list: if isAdminOrAbove();
       allow write: if false; // Server only

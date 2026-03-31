@@ -19,6 +19,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from 'lucide-react';
 import type { UserProfile } from '@/firebase/auth/use-user';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useBotStore } from '@/stores/bot-store';
 
 interface EditUserFormProps {
   user: UserProfile;
@@ -27,18 +29,26 @@ interface EditUserFormProps {
 
 const roles: UserRole[] = ["admin", "operator"];
 
+/** Normalizes botId from Firestore (string | string[] | undefined) into a string array. */
+function normalizeBotIds(botId: string | string[] | undefined): string[] {
+  if (!botId) return [];
+  if (Array.isArray(botId)) return botId.filter(Boolean);
+  return botId ? [botId] : [];
+}
+
 export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { bots: allBots } = useBotStore();
 
-  const [formData, setFormData] = useState<UserEditInput>({
+  const [formData, setFormData] = useState<Omit<UserEditInput, 'botId'> & { botIds: string[] }>({
     uid: user.uid,
     name: user.name || "",
     email: user.email || "",
     role: user.role,
     operatorId: user.operatorId || "",
-    botId: user.botId || '',
     color: user.color || "#0ea54f",
+    botIds: normalizeBotIds(user.botId),
   });
 
   const [errors, setErrors] = useState<z.ZodError<UserEditInput> | null>(null);
@@ -48,9 +58,13 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleInstanceIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
-    setFormData(prev => ({ ...prev, botId: value.trim() }));
+  const handleBotToggle = (botId: string, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      botIds: checked
+        ? [...prev.botIds, botId]
+        : prev.botIds.filter(id => id !== botId),
+    }));
   };
 
   const handleSelectChange = (name: keyof UserEditInput) => (value: string) => {
@@ -62,7 +76,17 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
     setIsSubmitting(true);
     setErrors(null);
 
-    const validation = userEditSchema.safeParse(formData);
+    const dataToValidate: UserEditInput = {
+      uid: formData.uid,
+      name: formData.name,
+      email: formData.email,
+      role: formData.role,
+      operatorId: formData.operatorId,
+      color: formData.color,
+      botId: formData.botIds,
+    };
+
+    const validation = userEditSchema.safeParse(dataToValidate);
 
     if (!validation.success) {
       setErrors(validation.error);
@@ -89,6 +113,8 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
   const getErrorForField = (fieldName: keyof UserEditInput) => {
     return errors?.errors.find(e => e.path.includes(fieldName))?.message;
   };
+
+  const isSuperadmin = formData.role === 'superadmin';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -125,11 +151,30 @@ export default function EditUserForm({ user, onSuccess }: EditUserFormProps) {
         {getErrorForField("operatorId") && <p className="text-sm font-medium text-destructive">{getErrorForField("operatorId")}</p>}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="botId">Ufficio</Label>
-        <Input id="botId" name="botId" placeholder="palermo1" value={formData.botId || ''} onChange={handleInstanceIdChange} disabled={isSubmitting || formData.role === 'admin'} />
-        {getErrorForField("botId") && <p className="text-sm font-medium text-destructive">{getErrorForField("botId")}</p>}
-      </div>
+      {!isSuperadmin && (
+        <div className="space-y-2">
+          <Label>Bot Assegnati</Label>
+          <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+            {allBots.length > 0 ? allBots.map(bot => (
+              <div key={bot.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`bot-${bot.botId}`}
+                  checked={formData.botIds.includes(bot.botId)}
+                  onCheckedChange={(checked) => handleBotToggle(bot.botId, !!checked)}
+                  disabled={isSubmitting}
+                />
+                <label htmlFor={`bot-${bot.botId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                  {bot.logoEmoji && <span className="mr-1">{bot.logoEmoji}</span>}
+                  {bot.name}{bot.phone ? ` (${bot.phone})` : ''}
+                </label>
+              </div>
+            )) : (
+              <p className="text-sm text-muted-foreground">Nessun bot disponibile. Configura prima i bot.</p>
+            )}
+          </div>
+          {getErrorForField("botId") && <p className="text-sm font-medium text-destructive">{getErrorForField("botId")}</p>}
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="color">Colore Operatore</Label>
